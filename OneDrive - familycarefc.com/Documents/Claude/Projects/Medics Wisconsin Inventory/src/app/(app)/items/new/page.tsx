@@ -1,9 +1,18 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ItemForm, type ItemFormValue } from "@/components/item-form";
 
 export default function NewItemPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewItemInner />
+    </Suspense>
+  );
+}
+
+function NewItemInner() {
   const sp = useSearchParams();
   const presetBarcode = sp.get("barcode") ?? "";
   const presetName = sp.get("name") ?? "";

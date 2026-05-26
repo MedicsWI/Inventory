@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -19,6 +19,14 @@ type Tmpl = { id: string; name: string };
 type Shift = { name: string; startsAt: string; endsAt: string };
 
 export default function NewEventPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewEventInner />
+    </Suspense>
+  );
+}
+
+function NewEventInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const initialTemplateId = sp.get("template") ?? "";

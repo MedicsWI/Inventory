@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
@@ -19,6 +19,14 @@ type Tmpl = { id: string; name: string };
 type Line = { itemId: string; requestedQty: number; notes: string };
 
 export default function NewPickListPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewPickListInner />
+    </Suspense>
+  );
+}
+
+function NewPickListInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const items = useQuery({ queryKey: ["items-lookup"], queryFn: () => api.get<ItemOpt[]>("/api/items") });
