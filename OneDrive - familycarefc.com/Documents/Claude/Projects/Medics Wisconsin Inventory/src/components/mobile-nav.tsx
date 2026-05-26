@@ -6,11 +6,11 @@ import { LayoutDashboard, Boxes, ScanLine, Clock, FolderTree } from "lucide-reac
 import { cn } from "@/lib/utils";
 
 const tabs = [
-  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/locations", label: "Locations", icon: FolderTree },
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard, prominent: false },
+  { href: "/locations", label: "Locations", icon: FolderTree, prominent: false },
   { href: "/scan", label: "Scan", icon: ScanLine, prominent: true },
-  { href: "/items", label: "Items", icon: Boxes },
-  { href: "/expiring", label: "Expiring", icon: Clock },
+  { href: "/items", label: "Items", icon: Boxes, prominent: false },
+  { href: "/expiring", label: "Expiring", icon: Clock, prominent: false },
 ] as const;
 
 export function MobileNav() {
