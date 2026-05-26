@@ -20,6 +20,7 @@ declare module "next-auth" {
 
 export const authConfig = {
   session: { strategy: "jwt" },
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   trustHost: true,
   pages: { signIn: "/login" },
   // Providers list is overridden in auth.ts to add Credentials with bcrypt.
@@ -34,3 +35,4 @@ export const authConfig = {
     },
   },
 } satisfies NextAuthConfig;
+
