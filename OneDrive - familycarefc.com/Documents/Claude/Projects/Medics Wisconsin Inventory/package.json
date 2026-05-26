@@ -5,7 +5,7 @@
   "description": "Medics Wisconsin field inventory management — Next.js 15 + Capacitor 6",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
