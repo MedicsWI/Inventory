@@ -1,0 +1,617 @@
+// Medics Wisconsin Inventory — Prisma schema
+// PostgreSQL (Supabase). Uses pooled URL for runtime, direct URL for migrations.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -------------------- Auth (NextAuth / Auth.js) --------------------
+
+enum Role {
+  ADMIN
+  MANAGER
+  MEDIC
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?   // optional, only for credentials login
+  role          Role      @default(MEDIC)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Per-user notification opt-ins. Default null → use role-based default.
+  receiveExpirationAlerts Boolean? @default(true)
+  receiveLowStockAlerts   Boolean? @default(true)
+  // Channel opt-ins. Defaults: in-app always; email/teams/push off until user opts in.
+  receiveAlertsByEmail    Boolean  @default(false)
+  receiveAlertsByTeams    Boolean  @default(false)
+  receiveAlertsByPush     Boolean  @default(false)
+
+  accounts             Account[]
+  sessions             Session[]
+  activityLogs         ActivityLog[]
+  notifications        Notification[]
+  checkouts            Checkout[]
+  assignedStockCounts  StockCount[]    @relation("StockCountAssignee")
+  approvedStockCounts  StockCount[]    @relation("StockCountApprover")
+  assignedPickLists    PickList[]      @relation("PickListAssignee")
+  completedPickLists   PickList[]      @relation("PickListCompleter")
+  pushSubscriptions    PushSubscription[]
+  eventSignOuts        EventSignOut[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Web Push subscriptions — one row per (user, device/browser).
+// Created when the user clicks "Enable push" in /account/alerts; deleted when they disable.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique  // unique URL provided by the browser's push service
+  p256dh    String              // public key
+  auth      String              // auth secret
+  userAgent String?             // for display in the settings UI
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// -------------------- Inventory --------------------
+
+enum LocationType {
+  STATION   // physical station / building
+  VEHICLE   // ambulance / truck
+  BOX       // storage box / tote
+  KIT       // jump bag / trauma kit
+  SHELF     // shelf / bin
+}
+
+model Location {
+  id          String       @id @default(cuid())
+  name        String
+  type        LocationType
+  barcode     String?      @unique   // for label-on-box scanning
+  notes       String?
+  photoUrl    String?
+
+  // Self-referential nesting (Sortly-style)
+  parentId    String?
+  parent      Location?    @relation("LocationToChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Location[]   @relation("LocationToChildren")
+
+  items       Item[]
+  stockCounts StockCount[]
+  pickLists   PickList[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([parentId])
+  @@index([type])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String?  // hex, for tags
+  items     Item[]
+  createdAt DateTime @default(now())
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String?
+  items     Item[]   @relation("ItemTags")
+  createdAt DateTime @default(now())
+}
+
+model Item {
+  id                 String    @id @default(cuid())
+  name               String
+  description        String?
+  sku                String?   // internal code
+  barcode            String?   @unique
+  quantity           Int       @default(0)   // AVAILABLE quantity (excludes active checkouts)
+  unit               String?   // "each", "box", "ml" — display only
+  lotNumber          String?
+  expirationDate     DateTime?
+  lowStockThreshold  Int?      // null = no alert
+  photoUrl           String?
+  notes              String?
+  returnable         Boolean   @default(false)  // true = equipment that's borrowed/returned (BP cuff, glucometer)
+
+  // Relations
+  locationId         String?
+  location           Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  categoryId         String?
+  category           Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags               Tag[]     @relation("ItemTags")
+  checkouts          Checkout[]
+  stockCountLines    StockCountLine[]
+  incomingOrderLines IncomingOrderLine[]
+  pickListLines      PickListLine[]
+  pickListTemplateItems PickListTemplateItem[]
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([locationId])
+  @@index([categoryId])
+  @@index([expirationDate])
+  @@index([barcode])
+}
+
+// -------------------- Stock counts (physical inventory verification) --------------------
+
+enum StockCountStatus {
+  DRAFT          // being set up
+  IN_PROGRESS    // counter is recording counts
+  REVIEW         // counts in, waiting for manager approval
+  COMPLETED      // approved & qty adjustments applied
+  CANCELED
+}
+
+model StockCount {
+  id            String           @id @default(cuid())
+  name          String           // e.g. "Q1 Trauma Kit A count"
+  status        StockCountStatus @default(DRAFT)
+  notes         String?
+
+  locationId    String?
+  location      Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  assignedToId  String?
+  assignedTo    User?            @relation("StockCountAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  approvedById  String?
+  approvedBy    User?            @relation("StockCountApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  lines         StockCountLine[]
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([status])
+  @@index([assignedToId])
+  @@index([locationId])
+}
+
+model StockCountLine {
+  id            String     @id @default(cuid())
+  stockCountId  String
+  stockCount    StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  expectedQty   Int        // snapshot taken when the count was started
+  actualQty     Int?       // null until counter records a value
+  countedAt     DateTime?
+  notes         String?
+
+  @@unique([stockCountId, itemId])
+  @@index([stockCountId])
+}
+
+// -------------------- Incoming orders (vendor / online) --------------------
+
+enum IncomingOrderStatus {
+  DRAFT      // PO being assembled, not yet sent to vendor
+  ORDERED    // sent to vendor, awaiting shipment
+  SHIPPED
+  PARTIAL    // some lines received
+  RECEIVED   // all lines received
+  CANCELED
+}
+
+model IncomingOrder {
+  id            String              @id @default(cuid())
+  vendor        String              // free text, e.g. "Bound Tree", "Henry Schein"
+
+  // Vendor contact info (for outbound PO emails)
+  vendorEmail   String?
+  vendorContact String?             // contact person name
+  vendorPhone   String?
+
+  orderNumber   String?             // vendor-side PO/order #
+  trackingUrl   String?             // shipment tracking link
+  status        IncomingOrderStatus @default(DRAFT)
+  orderedAt     DateTime            @default(now())
+  expectedAt    DateTime?
+  receivedAt    DateTime?
+  sentAt        DateTime?           // when the PO was emailed to vendor
+
+  notes         String?             // internal notes (visible in app only)
+  vendorNotes   String?             // notes/instructions printed on the PO sent to vendor
+
+  lines         IncomingOrderLine[]
+
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([status])
+  @@index([expectedAt])
+}
+
+model IncomingOrderLine {
+  id              String        @id @default(cuid())
+  incomingOrderId String
+  incomingOrder   IncomingOrder @relation(fields: [incomingOrderId], references: [id], onDelete: Cascade)
+
+  itemId          String?       // optional link to an existing Item
+  item            Item?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  name            String        // free text — what the vendor calls it
+  sku             String?
+  expectedQty     Int
+  receivedQty     Int           @default(0)
+  unitCost        Float?        // optional per-unit price (USD) for the PO
+
+  @@index([incomingOrderId])
+}
+
+// -------------------- Pick lists --------------------
+// A PickList is a one-off "go pull these items" job. Lines = items + requested qty.
+// When a line is marked picked, the source item's quantity decrements.
+// A PickListTemplate is a reusable definition that can spawn fresh PickLists
+// (e.g. "Trauma Kit A weekly resupply").
+
+enum PickListStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+model PickListTemplate {
+  id          String                 @id @default(cuid())
+  name        String                 @unique
+  description String?
+  items       PickListTemplateItem[]
+  spawned     PickList[]
+
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+}
+
+model PickListTemplateItem {
+  id         String           @id @default(cuid())
+  templateId String
+  template   PickListTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  itemId     String
+  item       Item             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantity   Int
+  notes      String?
+
+  @@unique([templateId, itemId])
+}
+
+model PickList {
+  id             String            @id @default(cuid())
+  name           String
+  status         PickListStatus    @default(DRAFT)
+
+  fromLocationId String?
+  fromLocation   Location?         @relation(fields: [fromLocationId], references: [id], onDelete: SetNull)
+  destination    String?           // free text — "Medic 12", "Event prep tomorrow", etc.
+  notes          String?
+
+  templateId     String?           // set if this list was spawned from a template
+  template       PickListTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  assignedToId   String?
+  assignedTo     User?             @relation("PickListAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  completedById  String?
+  completedBy    User?             @relation("PickListCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  lines          PickListLine[]
+
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model PickListLine {
+  id           String   @id @default(cuid())
+  pickListId   String
+  pickList     PickList @relation(fields: [pickListId], references: [id], onDelete: Cascade)
+  itemId       String
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  requestedQty Int
+  pickedQty    Int      @default(0)
+  notes        String?
+  pickedAt     DateTime?
+
+  @@unique([pickListId, itemId])
+  @@index([pickListId])
+}
+
+// -------------------- Events / equipment sign-out --------------------
+// One Event = one shift / detail / game day. Volunteers + staff sign in & out
+// shirt / radio / cart / bag (configurable per event). The detail page is a
+// big one-screen check-in/out sheet.
+
+enum EventStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+  CANCELED
+}
+
+model Event {
+  id             String         @id @default(cuid())
+  name           String
+  description    String?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  location       String?         // free text venue
+  status         EventStatus    @default(PLANNED)
+  // Gear categories shown as columns on the sheet. Stored as JSON array.
+  // Default for new events: ["Shirt","Radio","Cart","Bag"].
+  gearCategories Json            @default("[\"Shirt\",\"Radio\",\"Cart\",\"Bag\"]")
+  notes          String?
+
+  // Optional: where this event was spawned from. Lets us link recurring events.
+  templateId     String?
+  template       EventTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  shifts         EventShift[]
+  signOuts       EventSignOut[]
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([status])
+  @@index([startsAt])
+}
+
+// A shift inside an event (Morning 9-12, Midday 12-3, etc.). Optional —
+// events without shifts behave as one big window.
+model EventShift {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name      String   // "Morning", "Game day", "Setup", etc.
+  startsAt  DateTime?
+  endsAt    DateTime?
+  sortOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventId])
+}
+
+// One row per person at one event. Each person appears once even if they work
+// multiple shifts; the shifts they're on are stored as a JSON array of shift names.
+model EventSignOut {
+  id          String              @id @default(cuid())
+  eventId     String
+  event       Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  personName  String              // free text — works for volunteers without accounts
+  role        String?             // "VOLUNTEER" | "STAFF" — free-text but enforced in UI
+  // Optional link to a User account (only set if the person has one)
+  userId      String?
+  user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  notes       String?
+  // Array of shift names this person is working. ["Morning","Evening"] etc.
+  // Empty array = no shift assigned (works for events without shifts).
+  shifts      Json                @default("[]")
+
+  items       EventSignOutItem[]
+
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([eventId])
+  @@index([userId])
+}
+
+// One OUT/IN cycle of a gear category for a person.
+// Multiple rows per (signOutId, category) supported — that's how we track
+// "cart key was Sarah's morning, then Joe's midday".
+model EventSignOutItem {
+  id           String       @id @default(cuid())
+  signOutId    String
+  signOut      EventSignOut @relation(fields: [signOutId], references: [id], onDelete: Cascade)
+  category     String       // must match one of the parent event's gearCategories
+  // Optional shift label that this cycle happened during (e.g. "Morning").
+  // Auto-set from the active filter tab when OUT is tapped.
+  shift        String?
+  identifier   String?      // e.g. "Radio #3" for this cycle
+  outAt        DateTime?
+  inAt         DateTime?
+  outInitials  String?      // initials captured at sign-out
+  inInitials   String?      // initials captured at sign-in
+  outPhotoUrl  String?      // condition photo at sign-out
+  inPhotoUrl   String?      // condition photo at sign-in
+  notes        String?
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @default(now()) @updatedAt
+
+  @@index([signOutId])
+  @@index([signOutId, category])
+}
+
+// Reusable event definition. "Saturday at Lambeau" — define gear + shifts once,
+// spawn a new dated Event each week.
+model EventTemplate {
+  id             String                @id @default(cuid())
+  name           String                @unique
+  description    String?
+  location       String?
+  gearCategories Json                  @default("[\"Shirt\",\"Radio\",\"Cart\",\"Bag\"]")
+  notes          String?
+
+  shifts         EventTemplateShift[]
+  spawned        Event[]
+
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+}
+
+model EventTemplateShift {
+  id         String        @id @default(cuid())
+  templateId String
+  template   EventTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name       String
+  // Time of day for this shift, stored as "HH:MM" strings (24-hour).
+  // On spawn, the user picks a calendar date and these times become the concrete
+  // shift datetimes for that date.
+  startsAtTime String?
+  endsAtTime   String?
+  sortOrder    Int        @default(0)
+
+  @@index([templateId])
+}
+
+// Borrow / return record. When ACTIVE (returnedAt null) the item is "out" — its
+// available quantity is decremented for the duration. On return the quantity is restored.
+model Checkout {
+  id               String    @id @default(cuid())
+  itemId           String
+  item             Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  userId           String    // borrower (the medic)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  quantity         Int       @default(1)
+  checkedOutAt     DateTime  @default(now())
+  expectedReturnAt DateTime?
+  returnedAt       DateTime?
+  notes            String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([itemId])
+  @@index([userId, returnedAt])
+  @@index([returnedAt])
+  @@index([expectedReturnAt])
+}
+
+// -------------------- Audit + Notifications --------------------
+
+enum ActivityAction {
+  CREATE
+  UPDATE
+  DELETE
+  MOVE
+  SCAN
+  ADJUST_QTY
+  LOGIN
+  LOGOUT
+  CHECKOUT
+  RETURN
+  STOCK_COUNT_START
+  STOCK_COUNT_APPROVE
+  ORDER_RECEIVE
+  PICK_LIST_START
+  PICK_LIST_COMPLETE
+  ORDER_SEND
+}
+
+enum EntityType {
+  ITEM
+  LOCATION
+  CATEGORY
+  USER
+  CHECKOUT
+  STOCK_COUNT
+  INCOMING_ORDER
+  PICK_LIST
+  PICK_LIST_TEMPLATE
+  EVENT
+  EVENT_SIGN_OUT
+}
+
+model ActivityLog {
+  id         String         @id @default(cuid())
+  userId     String?
+  user       User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     ActivityAction
+  entityType EntityType
+  entityId   String
+  before     Json?
+  after      Json?
+  metadata   Json?          // free-form (e.g., scanned barcode, device id)
+  createdAt  DateTime       @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  EXPIRING_SOON
+  EXPIRED
+  LOW_STOCK
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String?
+  payload   Json?            // related entity ids
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
