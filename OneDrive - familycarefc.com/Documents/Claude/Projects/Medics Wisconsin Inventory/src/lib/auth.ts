@@ -31,6 +31,8 @@ const credentialsSchema = z.object({
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
+  // Allow auth to work on Vercel preview URLs + the production domain.
+  trustHost: true,
   pages: {
     signIn: "/login",
   },
