@@ -1,8 +1,8 @@
 {
+  "framework": "nextjs",
+  "buildCommand": "pnpm run build",
+  "installCommand": "pnpm install",
   "crons": [
-    {
-      "path": "/api/notifications/check",
-      "schedule": "0 13 * * *"
-    }
+    { "path": "/api/notifications/check", "schedule": "0 13 * * *" }
   ]
 }
