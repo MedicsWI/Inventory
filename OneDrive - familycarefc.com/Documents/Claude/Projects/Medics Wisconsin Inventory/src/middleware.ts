@@ -1,7 +1,11 @@
 // Protects all app routes except /login and /api/auth.
-// Auth.js v5 exports a middleware-friendly `auth` we wrap below.
-import { auth } from "@/lib/auth";
+// Runs on the Vercel Edge runtime, so it imports auth.config (Edge-safe) —
+// NOT the full auth.ts, which pulls in Prisma + bcrypt and would crash here.
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import { authConfig } from "@/lib/auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const isLoggedIn = !!req.auth;

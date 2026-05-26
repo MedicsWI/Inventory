@@ -1,27 +1,15 @@
-// Auth.js v5 (NextAuth) — Credentials + Google + JWT session.
-// We keep sessions JWT-based so mobile Capacitor builds can also use these cookies/tokens.
-import NextAuth, { type DefaultSession } from "next-auth";
+// Full server-side NextAuth instance — pulls in Prisma adapter, Credentials
+// provider, and bcrypt. NOT safe for Edge runtime. Middleware must use
+// auth.config.ts instead.
+import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@prisma/client";
-
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      role: Role;
-    } & DefaultSession["user"];
-  }
-
-  interface User {
-    role?: Role;
-  }
-}
+import { authConfig } from "@/lib/auth.config";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -29,13 +17,8 @@ const credentialsSchema = z.object({
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
-  // Allow auth to work on Vercel preview URLs + the production domain.
-  trustHost: true,
-  pages: {
-    signIn: "/login",
-  },
   providers: [
     Credentials({
       name: "Email + password",
@@ -52,6 +35,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         if (!user?.passwordHash) return null;
 
+        // Lazy-import keeps bcrypt out of any code path that doesn't sign in.
+        const bcrypt = (await import("bcryptjs")).default;
         const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
         if (!ok) return null;
 
@@ -76,13 +61,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       : []),
   ],
   callbacks: {
+    ...authConfig.callbacks,
     async jwt({ token, user }) {
-      // On first login, persist role into the JWT
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: Role }).role ?? "MEDIC";
       }
-      // Refresh role from DB occasionally (e.g., admin promotion mid-session)
       if (token.id && !token.role) {
         const db = await prisma.user.findUnique({
           where: { id: token.id as string },
@@ -91,11 +75,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (db) token.role = db.role;
       }
       return token;
-    },
-    async session({ session, token }) {
-      if (token.id) session.user.id = token.id as string;
-      if (token.role) session.user.role = token.role as Role;
-      return session;
     },
   },
 });
