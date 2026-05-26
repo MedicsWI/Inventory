@@ -68,7 +68,7 @@ export function PushToggle({ pushConfigured }: { pushConfigured: boolean }) {
       }
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
       });
       const json = sub.toJSON();
       await api.post("/api/push/subscribe", {
