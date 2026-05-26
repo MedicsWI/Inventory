@@ -29,9 +29,7 @@ Ask IT (or check in M365 admin → Active users):
 On the next page, copy and stash these two values — you'll paste them into `.env`:
 
 - **Application (client) ID** → `AZURE_CLIENT_ID`
-	abf5d942-e352-4a6d-931a-6304dadd7bb0
 - **Directory (tenant) ID** → `AZURE_TENANT_ID`
-	7442ffae-23b3-42f5-afde-c0ee3d79feda
 
 ### 3. Create a client secret
 
