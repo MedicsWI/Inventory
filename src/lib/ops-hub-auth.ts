@@ -20,7 +20,7 @@ export function identifyCaller(req: Request, session: Session | null): CallerIde
     return {
       kind: "user",
       userId: session.user.id,
-      label: session.user.name ?? session.user.email,
+      label: session.user.name ?? session.user.email ?? "user",
     };
   }
 
