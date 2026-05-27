@@ -8,6 +8,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import webpush from "web-push";
 import { prisma } from "@/lib/prisma";
 import { isGraphConfigured, sendViaGraph } from "@/lib/graph-mail";
+import { isTwilioConfigured, sendSms } from "@/lib/twilio";
 
 export type AlertChannelInputs = {
   // Logged-in user receiving this alert
@@ -98,6 +99,10 @@ export function teamsMode(): "email" | "webhook" | "none" {
 
 export function isPushConfigured(): boolean {
   return !!(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+}
+
+export function isSmsConfigured(): boolean {
+  return isTwilioConfigured();
 }
 
 // Configure web-push once (lazy)
@@ -271,6 +276,22 @@ export async function sendPushAlert(
     }
   }
   return { ok: sent > 0, sent, removed };
+}
+
+export async function sendSmsAlert(
+  input: AlertChannelInputs & { phone: string | null | undefined },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!isSmsConfigured()) return { ok: false, error: "Twilio not configured" };
+  if (!input.phone) return { ok: false, error: "User has no phone number on file" };
+
+  // Keep SMS body short — recipients pay attention to short, clear messages.
+  // Format: [Medics WI] {title}. Optional shortened body. Optional link.
+  const parts: string[] = [`[Medics WI] ${input.title}`];
+  if (input.body) parts.push(input.body);
+  if (input.linkUrl) parts.push(input.linkUrl);
+  const body = parts.join(" — ");
+
+  return sendSms({ to: input.phone, body });
 }
 
 function severityLabel(s?: AlertChannelInputs["severity"]): string {

@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell, Clock, AlertTriangle, Mail, MessageSquare, Smartphone } from "lucide-react";
+import { Bell, Clock, AlertTriangle, Mail, MessageSquare, Smartphone, MessageCircle } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PushToggle } from "@/components/push-toggle";
 
@@ -15,12 +17,15 @@ type Prefs = {
   receiveAlertsByEmail: boolean | null;
   receiveAlertsByTeams: boolean | null;
   receiveAlertsByPush: boolean | null;
+  receiveAlertsBySms: boolean | null;
+  phone: string | null;
 };
 
 type IntegrationsStatus = {
   emailConfigured: boolean;
   teamsConfigured: boolean;
   pushConfigured: boolean;
+  smsConfigured: boolean;
 };
 
 export default function AlertSettingsPage() {
@@ -39,6 +44,8 @@ export default function AlertSettingsPage() {
   const [byEmail, setByEmail] = useState(false);
   const [byTeams, setByTeams] = useState(false);
   const [byPush, setByPush] = useState(false);
+  const [bySms, setBySms] = useState(false);
+  const [phone, setPhone] = useState("");
 
   useEffect(() => {
     if (data) {
@@ -47,6 +54,8 @@ export default function AlertSettingsPage() {
       setByEmail(data.receiveAlertsByEmail === true);
       setByTeams(data.receiveAlertsByTeams === true);
       setByPush(data.receiveAlertsByPush === true);
+      setBySms(data.receiveAlertsBySms === true);
+      setPhone(data.phone ?? "");
     }
   }, [data]);
 
@@ -58,6 +67,8 @@ export default function AlertSettingsPage() {
         receiveAlertsByEmail: byEmail,
         receiveAlertsByTeams: byTeams,
         receiveAlertsByPush: byPush,
+        receiveAlertsBySms: bySms,
+        phone: phone.trim() ? phone.trim() : null,
       }),
     onSuccess: () => {
       toast.success("Saved.");
@@ -139,7 +150,7 @@ export default function AlertSettingsPage() {
             label="Push notifications (this browser / device)"
             description={
               integrations.data?.pushConfigured
-                ? "Pop-up notifications on whichever browsers and devices you enable. Works on PC + Android. iOS only if installed as a PWA (Add to Home Screen)."
+                ? "Pop-up notifications on whichever browsers and devices you enable. Works on PC + Android. iOS PWA push is unreliable — use SMS instead."
                 : "⚠ VAPID keys not configured yet — see Admin → Integrations."
             }
             icon={Smartphone}
@@ -147,6 +158,40 @@ export default function AlertSettingsPage() {
             onChange={setByPush}
             disabled={integrations.data && !integrations.data.pushConfigured}
           />
+          <Toggle
+            label="SMS text message"
+            description={
+              integrations.data?.smsConfigured
+                ? "Alerts texted to your phone. Best for iOS users — push is unreliable on iOS PWAs."
+                : "⚠ Twilio not configured yet — see Admin → Integrations."
+            }
+            icon={MessageCircle}
+            checked={bySms}
+            onChange={setBySms}
+            disabled={integrations.data && !integrations.data.smsConfigured}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Phone number</CardTitle>
+          <CardDescription>
+            Required for SMS alerts. Use E.164 format (e.g. <code>+14145551234</code>) — country code + number, no spaces or dashes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label htmlFor="phone">Mobile number</Label>
+          <Input
+            id="phone"
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+14145551234"
+          />
+          <p className="text-xs text-muted-foreground">
+            Standard text message rates apply. Reply STOP to opt out at any time.
+          </p>
         </CardContent>
       </Card>
 

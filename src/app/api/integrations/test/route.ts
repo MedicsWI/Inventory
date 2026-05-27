@@ -3,11 +3,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { assertCan } from "@/lib/permissions";
-import { sendEmailAlert, sendTeamsAlert } from "@/lib/notifier";
+import { sendEmailAlert, sendTeamsAlert, sendSmsAlert } from "@/lib/notifier";
 
 const schema = z.object({
-  channel: z.enum(["email", "teams"]),
+  channel: z.enum(["email", "teams", "sms"]),
 });
 
 export async function POST(req: Request) {
@@ -32,9 +33,25 @@ export async function POST(req: Request) {
     severity: "info" as const,
   };
 
-  const result = parsed.data.channel === "email"
-    ? await sendEmailAlert(payload)
-    : await sendTeamsAlert(payload);
+  let result: { ok: boolean; error?: string };
+  if (parsed.data.channel === "email") {
+    result = await sendEmailAlert(payload);
+  } else if (parsed.data.channel === "teams") {
+    result = await sendTeamsAlert(payload);
+  } else {
+    // SMS — read the admin's phone number off their User row
+    const me = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { phone: true },
+    });
+    if (!me?.phone) {
+      return NextResponse.json(
+        { ok: false, error: "No phone number on your profile. Add one at /account/alerts." },
+        { status: 400 },
+      );
+    }
+    result = await sendSmsAlert({ ...payload, phone: me.phone });
+  }
 
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 502 });
   return NextResponse.json({ ok: true });

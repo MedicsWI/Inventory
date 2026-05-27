@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendEmailAlert, sendTeamsAlert, sendPushAlert } from "@/lib/notifier";
+import { sendEmailAlert, sendTeamsAlert, sendPushAlert, sendSmsAlert } from "@/lib/notifier";
 
 export async function POST(req: Request) {
   // Auth: either a real session, OR a Bearer token matching CRON_SECRET
@@ -33,6 +33,8 @@ export async function POST(req: Request) {
       receiveAlertsByEmail: true,
       receiveAlertsByTeams: true,
       receiveAlertsByPush: true,
+      receiveAlertsBySms: true,
+      phone: true,
     },
   });
 
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
   );
 
   const appBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXTAUTH_URL ?? "";
-  const channelStats = { emailSent: 0, emailFailed: 0, teamsSent: 0, teamsFailed: 0, pushSent: 0, pushFailed: 0 };
+  const channelStats = { emailSent: 0, emailFailed: 0, teamsSent: 0, teamsFailed: 0, pushSent: 0, pushFailed: 0, smsSent: 0, smsFailed: 0 };
   // Teams is a SHARED channel — dedupe so multiple opted-in admins don't cause duplicate posts.
   const teamsKeysSent = new Set<string>();
   let created = 0;
@@ -139,6 +141,10 @@ export async function POST(req: Request) {
     if (u.receiveAlertsByPush) {
       const r = await sendPushAlert({ user, ...payload });
       r.ok ? (channelStats.pushSent += r.sent) : channelStats.pushFailed++;
+    }
+    if (u.receiveAlertsBySms && u.phone) {
+      const r = await sendSmsAlert({ user, ...payload, phone: u.phone });
+      r.ok ? channelStats.smsSent++ : channelStats.smsFailed++;
     }
   }
 

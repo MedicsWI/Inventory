@@ -33,10 +33,13 @@ model User {
   // Per-user notification opt-ins. Default null → use role-based default.
   receiveExpirationAlerts Boolean? @default(true)
   receiveLowStockAlerts   Boolean? @default(true)
-  // Channel opt-ins. Defaults: in-app always; email/teams/push off until user opts in.
+  // Channel opt-ins. Defaults: in-app always; email/teams/push/SMS off until user opts in.
   receiveAlertsByEmail    Boolean  @default(false)
   receiveAlertsByTeams    Boolean  @default(false)
   receiveAlertsByPush     Boolean  @default(false)
+  receiveAlertsBySms      Boolean  @default(false)
+  // E.164 phone number for SMS alerts (e.g. +14145551234). Required only for SMS.
+  phone                   String?
 
   accounts             Account[]
   sessions             Session[]

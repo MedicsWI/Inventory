@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, Mail, MessageSquare, Bell, CheckCircle2, AlertCircle, Send, Loader2 } from "lucide-react";
+import { ChevronLeft, Mail, MessageSquare, Bell, MessageCircle, CheckCircle2, AlertCircle, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ type Status = {
   teamsMode: "email" | "webhook" | "none";
   teamsChannelEmail: string | null;
   pushConfigured: boolean;
+  smsConfigured: boolean;
+  smsFromNumber: string | null;
   graphSendFrom: string | null;
   smtpHost: string | null;
   smtpFrom: string | null;
@@ -28,7 +30,7 @@ export default function IntegrationsPage() {
   });
 
   const test = useMutation({
-    mutationFn: (channel: "email" | "teams") =>
+    mutationFn: (channel: "email" | "teams" | "sms") =>
       api.post<{ ok: boolean; error?: string }>("/api/integrations/test", { channel }),
     onSuccess: () => toast.success("Sent. Check the destination."),
     onError: (e) => toast.error(String(e)),
@@ -135,6 +137,37 @@ export default function IntegrationsPage() {
           )}
           <Button asChild size="sm" variant="outline">
             <Link href="/account/alerts">Open Alert settings</Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><MessageCircle className="h-4 w-4" /> SMS (Twilio)</CardTitle>
+          <CardDescription>
+            {status.data?.smsConfigured
+              ? <>Twilio configured. Sending from <span className="font-mono text-xs">{status.data.smsFromNumber}</span>. iOS users should opt into SMS over push.</>
+              : <>Not configured. Add <code className="text-xs">TWILIO_ACCOUNT_SID</code>, <code className="text-xs">TWILIO_AUTH_TOKEN</code>, and <code className="text-xs">TWILIO_FROM_NUMBER</code> to env vars.</>
+            }
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3">
+          {status.data?.smsConfigured ? (
+            <Badge variant="ok" className="inline-flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" /> Configured
+            </Badge>
+          ) : (
+            <Badge variant="warn" className="inline-flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> Not configured
+            </Badge>
+          )}
+          <Button
+            size="sm"
+            onClick={() => test.mutate("sms")}
+            disabled={!status.data?.smsConfigured || test.isPending}
+          >
+            {test.isPending && test.variables === "sms" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Send test SMS to me
           </Button>
         </CardContent>
       </Card>
