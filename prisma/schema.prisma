@@ -52,6 +52,7 @@ model User {
   completedPickLists   PickList[]      @relation("PickListCompleter")
   pushSubscriptions    PushSubscription[]
   eventSignOuts        EventSignOut[]
+  verifiedVolunteers   Volunteer[]     @relation("VolunteerCredVerifier")
 }
 
 model Account {
@@ -449,6 +450,9 @@ model EventSignOut {
   // Optional link to a User account (only set if the person has one)
   userId      String?
   user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // Optional link to the Volunteer record (preferred path; personName is fallback)
+  volunteerId String?
+  volunteer   Volunteer?          @relation(fields: [volunteerId], references: [id], onDelete: SetNull)
   notes       String?
   // Array of shift names this person is working. ["Morning","Evening"] etc.
   // Empty array = no shift assigned (works for events without shifts).
@@ -461,6 +465,86 @@ model EventSignOut {
 
   @@index([eventId])
   @@index([userId])
+  @@index([volunteerId])
+}
+
+// -------------------- Volunteers --------------------
+// One row per person across all events. Imported from RegPack via CSV; Britta
+// manages the demographic / contact / acknowledgment columns, Brian verifies
+// licenses in-app. EventSignOut links here when the person is known.
+
+enum VolunteerType {
+  MEDICAL
+  SECURITY
+}
+
+enum CredLevel {
+  EMR
+  EMT
+  AEMT
+  PARAMEDIC
+  RN
+  LPN
+  MD
+  DO
+  PA
+  NP
+  SECURITY
+  POLICE
+  FIRE
+  CHAPLAIN
+  OTHER
+}
+
+model Volunteer {
+  id                     String         @id @default(cuid())
+  type                   VolunteerType  @default(MEDICAL)
+  firstName              String
+  lastName               String
+  email                  String         @unique
+  phone                  String?        // E.164 (+14145551234)
+  state                  String?        // 2-letter abbreviation
+  dob                    DateTime?      // PHI — guard read access
+  shirtSize              String?        // XS/S/M/L/XL/XXL/XXXL
+
+  // Credentials (Brian verifies — left blank in import)
+  credLevel              CredLevel?     // license/cert level
+  credNumber             String?        // license/cert number (Brian fills in)
+  credExpiresAt          DateTime?      // expiration (Brian fills in)
+  credVerified           Boolean        @default(false)
+  credVerifiedById       String?
+  credVerifiedBy         User?          @relation("VolunteerCredVerifier", fields: [credVerifiedById], references: [id], onDelete: SetNull)
+  credVerifiedAt         DateTime?
+
+  // Acknowledgments (signed/sent/reviewed flags)
+  cartWaiverSigned       Boolean        @default(false)
+  cartWaiverSignedAt     DateTime?
+  emailListOptIn         Boolean        @default(false)
+  welcomeEmailSent       Boolean        @default(false)
+  welcomeEmailSentAt     DateTime?
+
+  // Event context (informational, from RegPack)
+  camping                Boolean        @default(false)
+  shiftCount             Int?           // shifts committed to in RegPack
+  returning              Boolean        @default(false) // false = new
+  idPictureUrl           String?        // URL to ID photo
+
+  // Emergency contact
+  emergencyContactName   String?
+  emergencyContactPhone  String?
+
+  notes                  String?
+
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  signOuts               EventSignOut[]
+
+  @@index([lastName, firstName])
+  @@index([type])
+  @@index([credLevel])
+  @@index([credExpiresAt])
+  @@index([credVerified])
 }
 
 // One OUT/IN cycle of a gear category for a person.

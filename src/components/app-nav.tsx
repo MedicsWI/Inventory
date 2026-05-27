@@ -25,6 +25,7 @@ import {
   QrCode,
   Briefcase,
   ExternalLink,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -84,6 +85,7 @@ const groups: { title: string; items: NavItem[]; adminOnly?: boolean }[] = [
     title: "Admin",
     adminOnly: true,
     items: [
+      { href: "/volunteers", label: "Volunteers", icon: Users },
       { href: "/admin/checkouts", label: "All checkouts", icon: PackageCheck },
       { href: "/admin", label: "Settings & users", icon: Settings },
     ],
