@@ -4,7 +4,6 @@ const config: CapacitorConfig = {
   appId: "com.medicswi.inventory",
   appName: "Medics WI Inventory",
   webDir: "out",
-  bundledWebRuntime: false,
   server: {
     // Production URL the native app talks to for its API calls.
     // Local dev: comment `url` out and the bundled static export is served from the app itself.

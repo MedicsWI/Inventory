@@ -14,7 +14,8 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "cap:sync": "next build && next export -o out && npx cap sync",
+    "cap:webdir": "node -e \"const fs=require('fs');fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/index.html','<!doctype html><html><head><meta http-equiv=refresh content=\\\"0;url=https://inventory.medicswisconsin.com\\\"><title>Medics WI Inventory</title></head><body style=\\\"background:#0b1220;color:#fff;font-family:system-ui;text-align:center;padding-top:40vh\\\">Loading…</body></html>')\"",
+    "cap:sync": "pnpm cap:webdir && npx cap sync",
     "cap:android": "pnpm cap:sync && npx cap open android",
     "cap:ios": "pnpm cap:sync && npx cap open ios"
   },
