@@ -332,8 +332,8 @@ function QrPoster({ eventId, eventName }: { eventId: string; eventName: string }
         bwipjs.toCanvas(canvasRef.current!, {
           bcid: "qrcode",
           text: signupUrl,
-          scale: 6,
-          padding: 10,
+          scale: 4,         // generates ~280px PNG; CSS scales it to container
+          padding: 6,
           backgroundcolor: "FFFFFF",
         });
       } catch {
@@ -372,8 +372,12 @@ function QrPoster({ eventId, eventName }: { eventId: string; eventName: string }
         <CardDescription>Post at staff check-in. Anyone can scan — no login.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="bg-white p-3 rounded-md grid place-items-center">
-          <canvas ref={canvasRef} />
+        <div className="bg-white p-3 rounded-md grid place-items-center overflow-hidden">
+          <canvas
+            ref={canvasRef}
+            className="block max-w-full h-auto"
+            style={{ width: "100%", maxWidth: 240 }}
+          />
         </div>
         <div className="text-xs text-muted-foreground break-all font-mono">{signupUrl}</div>
         <div className="flex gap-2">
