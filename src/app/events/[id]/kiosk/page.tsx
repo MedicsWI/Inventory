@@ -11,10 +11,11 @@
 import { use, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, LogOut, ArrowLeft, CircleCheck, Circle } from "lucide-react";
+import { ChevronLeft, LogOut, ArrowLeft, CircleCheck, Circle, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { EventGearDialog, type GearDialogSubmit } from "@/components/event-gear-dialog";
 import { cn } from "@/lib/utils";
 
@@ -51,11 +52,30 @@ export default function KioskPage({ params }: { params: Promise<{ id: string }> 
   });
 
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [addingPerson, setAddingPerson] = useState(false);
+  const [newPersonName, setNewPersonName] = useState("");
   const [gearDialog, setGearDialog] = useState<
     | { mode: "out"; category: string; soId: string }
     | { mode: "in"; category: string; soId: string; itemId: string; identifier: string | null }
     | null
   >(null);
+
+  const addPerson = useMutation({
+    mutationFn: (name: string) =>
+      api.post<{ id: string }>(`/api/events/${id}/sign-outs`, {
+        personName: name,
+        role: "VOLUNTEER",
+        shifts: [], // empty = available to all shifts; manager can refine later on the full event page
+      }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["event", id] });
+      setNewPersonName("");
+      setAddingPerson(false);
+      // jump straight to the new person's gear view
+      setSelectedPersonId(r.id);
+    },
+    onError: (e) => toast.error(String(e)),
+  });
 
   const newCycle = useMutation({
     mutationFn: (vars: { soId: string; category: string; identifier?: string | null; initials?: string | null; photoUrl?: string | null }) =>
@@ -120,32 +140,78 @@ export default function KioskPage({ params }: { params: Promise<{ id: string }> 
       <KioskFrame eventId={id} title={data.name} subtitle={data.location ?? undefined}>
         <div className="space-y-4">
           <h2 className="text-xl text-center text-muted-foreground">Tap your name</h2>
-          {data.signOuts.length === 0 ? (
-            <div className="text-center text-muted-foreground py-12">
-              No one is signed up for this event yet. Ask a manager to add you.
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {data.signOuts
+              .slice()
+              .sort((a, b) => a.personName.localeCompare(b.personName))
+              .map((s) => {
+                const openCycles = s.items.filter((c) => c.outAt && !c.inAt).length;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setSelectedPersonId(s.id)}
+                    className="h-24 rounded-xl border-2 bg-card hover:bg-accent hover:border-primary transition-colors text-lg font-semibold p-3 text-left relative"
+                  >
+                    <div>{s.personName}</div>
+                    {openCycles > 0 && (
+                      <div className="absolute top-2 right-2 text-xs bg-warn/20 text-warn-foreground rounded-full px-2 py-0.5">
+                        {openCycles} out
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+
+            {/* Add-person tile — opens an inline form */}
+            {!addingPerson && (
+              <button
+                onClick={() => setAddingPerson(true)}
+                className="h-24 rounded-xl border-2 border-dashed bg-card hover:bg-accent hover:border-primary transition-colors text-base font-medium p-3 grid place-items-center text-muted-foreground"
+              >
+                <div className="flex flex-col items-center gap-1">
+                  <UserPlus className="h-5 w-5" />
+                  <span>Add person</span>
+                </div>
+              </button>
+            )}
+          </div>
+
+          {addingPerson && (
+            <div className="rounded-xl border-2 border-primary bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold">New person</div>
+                <Button variant="ghost" size="icon" onClick={() => { setAddingPerson(false); setNewPersonName(""); }} aria-label="Cancel">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <Input
+                value={newPersonName}
+                onChange={(e) => setNewPersonName(e.target.value)}
+                placeholder="Full name"
+                autoFocus
+                className="h-12 text-lg"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newPersonName.trim()) {
+                    e.preventDefault();
+                    addPerson.mutate(newPersonName.trim());
+                  }
+                }}
+              />
+              <Button
+                size="lg"
+                className="w-full h-12 text-base"
+                onClick={() => newPersonName.trim() && addPerson.mutate(newPersonName.trim())}
+                disabled={!newPersonName.trim() || addPerson.isPending}
+              >
+                <UserPlus className="h-4 w-4" /> Add and start sign-out
+              </Button>
             </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {data.signOuts
-                .slice()
-                .sort((a, b) => a.personName.localeCompare(b.personName))
-                .map((s) => {
-                  const openCycles = s.items.filter((c) => c.outAt && !c.inAt).length;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => setSelectedPersonId(s.id)}
-                      className="h-24 rounded-xl border-2 bg-card hover:bg-accent hover:border-primary transition-colors text-lg font-semibold p-3 text-left relative"
-                    >
-                      <div>{s.personName}</div>
-                      {openCycles > 0 && (
-                        <div className="absolute top-2 right-2 text-xs bg-warn/20 text-warn-foreground rounded-full px-2 py-0.5">
-                          {openCycles} out
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
+          )}
+
+          {data.signOuts.length === 0 && !addingPerson && (
+            <div className="text-center text-muted-foreground text-sm">
+              No one signed up yet. Tap <strong>Add person</strong> above to get started.
             </div>
           )}
         </div>
