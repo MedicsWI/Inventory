@@ -161,19 +161,22 @@ export function AppNav() {
         })}
       </nav>
 
-      {/* Cross-link to Operations Hub — separate from the main nav so it's visually a 'leave this app' action */}
-      <div className="border-t px-3 py-2">
-        <a
-          href="https://opshub.medicswisconsin.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 px-3 py-2 text-sm rounded-md hover:bg-accent text-muted-foreground"
-        >
-          <Briefcase className="h-4 w-4" />
-          <span className="flex-1">Operations Hub</span>
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      </div>
+      {/* Cross-link to Operations Hub — only renders when NEXT_PUBLIC_OPSHUB_URL is set,
+          so we can ship Operations Hub independently and turn this on by adding the env var. */}
+      {process.env.NEXT_PUBLIC_OPSHUB_URL && (
+        <div className="border-t px-3 py-2">
+          <a
+            href={process.env.NEXT_PUBLIC_OPSHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-3 py-2 text-sm rounded-md hover:bg-accent text-muted-foreground"
+          >
+            <Briefcase className="h-4 w-4" />
+            <span className="flex-1">Operations Hub</span>
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+      )}
 
       {/* Footer: account actions + theme + sign out */}
       <div className="border-t p-3">
