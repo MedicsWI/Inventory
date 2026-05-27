@@ -26,9 +26,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Magic-link sign-in: user enters their email, we send them a one-time link via
     // Microsoft Graph (same sender mailbox used for system alerts). Click → signed in.
     EmailProvider({
+      // Dummy server config — the provider validates this exists, but our custom
+      // sendVerificationRequest below overrides nodemailer entirely, so this is unused.
+      server: { host: "localhost", port: 1, auth: { user: "noop", pass: "noop" } },
       from: process.env.GRAPH_SEND_FROM,
-      // Tokens stored in VerificationToken table by the Prisma adapter.
-      // Custom sender uses our Graph integration; nodemailer is not used at runtime.
       async sendVerificationRequest({ identifier, url, expires }) {
         const host = new URL(url).host;
         const expiresAt = expires
