@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft, Plus, Trash2, Play, Check, CalendarDays, FileText, X,
-  CircleCheck, CircleDot, Circle, History, ChevronDown, Undo2,
+  CircleCheck, CircleDot, Circle, History, ChevronDown, Undo2, Tablet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -248,6 +248,11 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               </Button>
             </>
           )}
+          <Button asChild variant="outline">
+            <Link href={`/events/${id}/kiosk`}>
+              <Tablet className="h-4 w-4" /> Open kiosk
+            </Link>
+          </Button>
           <Button variant="outline" onClick={downloadSheet}>
             <FileText className="h-4 w-4" /> Download PDF
           </Button>

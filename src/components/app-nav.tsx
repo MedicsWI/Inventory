@@ -22,6 +22,7 @@ import {
   Truck,
   ListChecks,
   CalendarDays,
+  QrCode,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ const groups: { title: string; items: NavItem[]; adminOnly?: boolean }[] = [
     title: "Workflow",
     items: [
       { href: "/events", label: "Events", icon: CalendarDays },
+      { href: "/labels", label: "QR labels", icon: QrCode },
       { href: "/pick-lists", label: "Pick lists", icon: ListChecks },
       { href: "/stock-counts", label: "Stock counts", icon: ClipboardCheck },
       { href: "/orders", label: "Incoming orders", icon: Truck },

@@ -5,7 +5,7 @@
 // records just the timestamp (preserves the fast tap-and-go workflow).
 
 import * as React from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, ScanLine } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhotoPicker } from "@/components/photo-picker";
+import { BarcodeScanner } from "@/components/barcode-scanner";
 
 export type GearDialogSubmit = {
   identifier?: string | null;
@@ -48,6 +49,7 @@ export function EventGearDialog({
   const [identifier, setIdentifier] = React.useState("");
   const [initials, setInitials] = React.useState("");
   const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = React.useState(false);
 
   // Reset state when dialog opens
   React.useEffect(() => {
@@ -55,6 +57,7 @@ export function EventGearDialog({
       setIdentifier("");
       setInitials("");
       setPhotoUrl(null);
+      setScannerOpen(false);
     }
   }, [open]);
 
@@ -89,14 +92,36 @@ export function EventGearDialog({
               <Label htmlFor="identifier">
                 {category} ID / number (optional)
               </Label>
-              <Input
-                id="identifier"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={`e.g. ${category} #3`}
-                autoFocus
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSubmit(); } }}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="identifier"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder={`e.g. ${category} #3`}
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSubmit(); } }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setScannerOpen(true)}
+                  aria-label={`Scan ${category} QR code`}
+                >
+                  <ScanLine className="h-4 w-4" />
+                </Button>
+              </div>
+              {scannerOpen && (
+                <div className="mt-2 rounded-md border bg-card overflow-hidden">
+                  <BarcodeScanner
+                    onScan={(r) => {
+                      setIdentifier(r.rawValue);
+                      setScannerOpen(false);
+                    }}
+                    onClose={() => setScannerOpen(false)}
+                  />
+                </div>
+              )}
             </div>
           )}
 
