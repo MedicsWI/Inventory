@@ -53,6 +53,7 @@ model User {
   pushSubscriptions    PushSubscription[]
   eventSignOuts        EventSignOut[]
   verifiedVolunteers   Volunteer[]     @relation("VolunteerCredVerifier")
+  sentAlerts           Alert[]
 }
 
 model Account {
@@ -411,8 +412,10 @@ model Event {
   templateId     String?
   template       EventTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
-  shifts         EventShift[]
-  signOuts       EventSignOut[]
+  shifts             EventShift[]
+  signOuts           EventSignOut[]
+  alertSubscribers   AlertSubscriber[]
+  alerts             Alert[]
 
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -539,12 +542,102 @@ model Volunteer {
   updatedAt              DateTime       @updatedAt
 
   signOuts               EventSignOut[]
+  alertSubscriptions     AlertSubscriber[]
 
   @@index([lastName, firstName])
   @@index([type])
   @@index([credLevel])
   @@index([credExpiresAt])
   @@index([credVerified])
+}
+
+// -------------------- Alert groups --------------------
+// Per-event broadcast list. Anyone at the event can opt in via a QR poster
+// (no login). Topics let us send a lost-child alert to one subset and an
+// all-hands to a wider one. Dispatchers in the Ops Hub call /api/alerts/broadcast.
+
+enum AlertTopic {
+  LOST_CHILD
+  SEVERE_WEATHER
+  ALL_HANDS
+  GEAR_RETURN
+}
+
+enum AlertSource {
+  QR
+  KIOSK
+  VOLUNTEER
+  ADMIN
+  OPSHUB
+}
+
+enum AlertSendStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model AlertSubscriber {
+  id          String       @id @default(cuid())
+  eventId     String
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name        String
+  phone       String       // E.164
+  department  String?      // free-text: Parking, Mainstage, Info Booth, etc.
+  topics      AlertTopic[] @default([])
+  source      AlertSource  @default(QR)
+  consentAt   DateTime     @default(now())
+  // STOP-handled: set true on inbound STOP keyword, broadcast skips these.
+  stopped     Boolean      @default(false)
+  stoppedAt   DateTime?
+  // Optional link if a Volunteer opted in from their volunteer page.
+  volunteerId String?
+  volunteer   Volunteer?   @relation(fields: [volunteerId], references: [id], onDelete: SetNull)
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  sends       AlertSend[]
+
+  @@unique([eventId, phone])
+  @@index([eventId])
+  @@index([phone])
+}
+
+model Alert {
+  id           String      @id @default(cuid())
+  eventId      String
+  event        Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  topic        AlertTopic
+  body         String
+  // Who sent it. Either an internal user…
+  sentById     String?
+  sentBy       User?       @relation(fields: [sentById], references: [id], onDelete: SetNull)
+  // …or an external system (Ops Hub) with a free-text label like "ops-hub:dispatcher Jane Doe".
+  sentByLabel  String?
+  recipientCount Int       @default(0)
+  createdAt    DateTime    @default(now())
+
+  sends        AlertSend[]
+
+  @@index([eventId])
+  @@index([createdAt])
+}
+
+model AlertSend {
+  id            String          @id @default(cuid())
+  alertId       String
+  alert         Alert           @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  subscriberId  String
+  subscriber    AlertSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  phone         String
+  status        AlertSendStatus @default(QUEUED)
+  twilioSid     String?
+  error         String?
+  createdAt     DateTime        @default(now())
+
+  @@index([alertId])
+  @@index([subscriberId])
 }
 
 // One OUT/IN cycle of a gear category for a person.
