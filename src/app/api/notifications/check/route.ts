@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       id: true,
       name: true,
       email: true,
+      role: true,
       receiveExpirationAlerts: true,
       receiveLowStockAlerts: true,
       receiveAlertsByEmail: true,
@@ -37,6 +38,14 @@ export async function POST(req: Request) {
       phone: true,
     },
   });
+
+  // Inventory alerts are operational — ADMIN/MANAGER receive email by default
+  // because they own these alerts. The flag still controls Teams/Push/SMS so
+  // those stay opt-in. MEDIC role (if ever queried) still requires opt-in.
+  function wantsEmail(u: (typeof recipients)[number]): boolean {
+    if (u.role === "ADMIN" || u.role === "MANAGER") return true;
+    return u.receiveAlertsByEmail === true;
+  }
 
   if (recipients.length === 0) {
     return NextResponse.json({ created: 0, reason: "No admin/manager recipients" });
@@ -125,7 +134,7 @@ export async function POST(req: Request) {
     payload: { title: string; body: string | null; linkUrl?: string; severity: "info" | "warning" | "critical" },
   ) {
     const user = { id: u.id, name: u.name, email: u.email };
-    if (u.receiveAlertsByEmail) {
+    if (wantsEmail(u)) {
       const r = await sendEmailAlert({ user, ...payload });
       r.ok ? channelStats.emailSent++ : channelStats.emailFailed++;
     }

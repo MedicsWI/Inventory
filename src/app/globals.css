@@ -36,26 +36,28 @@
     --radius: 0.75rem;
   }
 
+  /* Dark theme — aligned with Medics WI Operations Hub UI Color Guide so the
+     two apps share base surfaces, borders, and text tones. */
   .dark {
-    --background: 222 47% 6%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 9%;
+    --background: 215 40% 8%;             /* #0a1224 */
+    --foreground: 210 40% 98%;             /* #f7faff */
+    --card: 215 35% 11%;                   /* #10182b */
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 9%;
+    --popover: 215 35% 11%;
     --popover-foreground: 210 40% 98%;
-    --primary: 199 89% 55%;
-    --primary-foreground: 222 47% 6%;
-    --secondary: 217.2 32.6% 17.5%;
+    --primary: 199 89% 48%;                /* brand-cyan #0ea5e9 */
+    --primary-foreground: 215 40% 8%;
+    --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;       /* #94a3b8 */
+    --accent: 217 33% 17%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 50.6%;
+    --destructive: 0 72% 51%;              /* brand-red */
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 20%;
-    --input: 217.2 32.6% 20%;
-    --ring: 199 89% 55%;
+    --border: 217 33% 22%;                 /* #283448 */
+    --input: 217 33% 22%;
+    --ring: 199 89% 48%;
   }
 }
 

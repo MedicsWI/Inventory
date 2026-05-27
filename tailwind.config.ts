@@ -45,6 +45,16 @@ const config: Config = {
         ok: "hsl(142 71% 45%)",
         warn: "hsl(43 96% 56%)",
         danger: "hsl(0 84% 60%)",
+        // Brand palette — kept in sync with Medics WI Operations Hub.
+        // Hex values pulled from docs/UI-COLOR-GUIDE.md so cross-app surfaces
+        // (badges, sidebar dots, status pills) render the same on both apps.
+        "brand-navy":  "#0A2540",
+        "brand-blue":  "#1E3A8A",
+        "brand-cyan":  "#0EA5E9",
+        "brand-green": "#16A34A",
+        "brand-amber": "#D97706",
+        "brand-red":   "#DC2626",
+        "brand-paper": "#F8FAFC",
       },
       borderRadius: {
         lg: "var(--radius)",
