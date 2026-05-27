@@ -2,9 +2,9 @@
 
 import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, LogIn } from "lucide-react";
+import { Loader2, Mail } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,27 +21,26 @@ export default function LoginPage() {
 }
 
 function LoginInner() {
-  const router = useRouter();
   const sp = useSearchParams();
   const from = sp.get("from") ?? "/dashboard";
+  const errorParam = sp.get("error");
 
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    const res = await signIn("credentials", { email, password, redirect: false });
-    setLoading(false);
-    if (res?.ok) {
-      router.push(from);
+    if (!email) return;
+    setMagicLoading(true);
+    const res = await signIn("email", { email, callbackUrl: from, redirect: false });
+    setMagicLoading(false);
+    if (res?.error) {
+      toast.error("Could not send sign-in link. Try again or use Microsoft sign-in.");
     } else {
-      toast.error("Invalid email or password.");
+      setMagicSent(true);
     }
   }
-
-  const googleEnabled = !!process.env.NEXT_PUBLIC_GOOGLE_ENABLED;
 
   return (
     <main className="min-h-screen grid place-items-center p-4">
@@ -51,55 +50,73 @@ function LoginInner() {
             M
           </div>
           <CardTitle>Medics WI Inventory</CardTitle>
-          <CardDescription>Sign in to continue.</CardDescription>
+          <CardDescription>Sign in with your Microsoft account or get a sign-in link by email.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@medicswi.com"
-              />
+        <CardContent className="space-y-4">
+          {errorParam && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              Sign-in failed. Try again, or reach out to Brian if it keeps happening.
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <Button type="submit" size="lg" className="w-full" disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
-              Sign in
-            </Button>
-          </form>
+          )}
 
-          {googleEnabled && (
-            <>
-              <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="h-px flex-1 bg-border" />
-                or
-                <span className="h-px flex-1 bg-border" />
+          <Button
+            type="button"
+            size="lg"
+            className="w-full"
+            onClick={() => signIn("microsoft-entra-id", { callbackUrl: from })}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+              <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+              <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+              <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+            </svg>
+            Sign in with Microsoft
+          </Button>
+
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            or get a sign-in link
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          {magicSent ? (
+            <div className="rounded-md border bg-muted/40 p-4 text-sm text-center space-y-2">
+              <div className="font-medium">Check your email</div>
+              <div className="text-xs text-muted-foreground">
+                We sent a sign-in link to <strong>{email}</strong>. Click the link in the email to finish signing in.
               </div>
               <Button
                 type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => signIn("google", { callbackUrl: from })}
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setMagicSent(false);
+                  setEmail("");
+                }}
               >
-                Continue with Google
+                Use a different email
               </Button>
-            </>
+            </div>
+          ) : (
+            <form onSubmit={handleMagicLink} className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@medicswisconsin.com"
+                />
+              </div>
+              <Button type="submit" variant="outline" size="lg" className="w-full" disabled={magicLoading || !email}>
+                {magicLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                Email me a sign-in link
+              </Button>
+            </form>
           )}
         </CardContent>
       </Card>

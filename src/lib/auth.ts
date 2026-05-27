@@ -1,67 +1,72 @@
-// Full server-side NextAuth instance — pulls in Prisma adapter, Credentials
-// provider, and bcrypt. NOT safe for Edge runtime. Middleware must use
-// auth.config.ts instead.
+// Full server-side NextAuth instance. NOT safe for Edge runtime — pulls in
+// Prisma adapter and Graph email sender. Middleware uses auth.config.ts instead.
 import NextAuth from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
+import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
+import EmailProvider from "next-auth/providers/email";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@prisma/client";
 import { authConfig } from "@/lib/auth.config";
-
-const credentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
+import { sendViaGraph } from "@/lib/graph-mail";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter: PrismaAdapter(prisma),
   providers: [
-    Credentials({
-      name: "Email + password",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(raw) {
-        const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
-
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email.toLowerCase() },
+    // M365 / Entra ID single sign-on. Users sign in with their @medicswisconsin.com account.
+    // First-time sign-in matches by email and links to the existing User row (preserving role).
+    MicrosoftEntraID({
+      clientId: process.env.AZURE_AD_CLIENT_ID!,
+      clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
+      issuer: `https://login.microsoftonline.com/${process.env.AZURE_AD_TENANT_ID}/v2.0`,
+      // Link OAuth account to an existing User by email. Safe in our single-tenant context.
+      allowDangerousEmailAccountLinking: true,
+    }),
+    // Magic-link sign-in: user enters their email, we send them a one-time link via
+    // Microsoft Graph (same sender mailbox used for system alerts). Click → signed in.
+    EmailProvider({
+      from: process.env.GRAPH_SEND_FROM,
+      // Tokens stored in VerificationToken table by the Prisma adapter.
+      // Custom sender uses our Graph integration; nodemailer is not used at runtime.
+      async sendVerificationRequest({ identifier, url, expires }) {
+        const host = new URL(url).host;
+        const expiresAt = expires
+          ? new Date(expires).toLocaleString("en-US", { timeZone: "America/Chicago" })
+          : "in 24 hours";
+        const html = `
+          <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111">
+            <div style="border-bottom:2px solid #0ea5e9;padding-bottom:12px;margin-bottom:16px">
+              <div style="font-size:20px;font-weight:700">Medics Wisconsin Inventory</div>
+              <div style="font-size:12px;color:#666">Sign in link</div>
+            </div>
+            <p>Click the button below to sign in to <strong>${host}</strong>. The link expires ${expiresAt}.</p>
+            <p style="margin:24px 0">
+              <a href="${url}" style="background:#0ea5e9;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Sign in</a>
+            </p>
+            <p style="font-size:12px;color:#666">If the button doesn't work, paste this link into your browser:</p>
+            <p style="font-size:11px;color:#666;word-break:break-all">${url}</p>
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0" />
+            <p style="font-size:11px;color:#666">If you didn't request this, you can safely ignore it.</p>
+          </div>
+        `;
+        const text = `Sign in to ${host}\n\n${url}\n\nLink expires ${expiresAt}. If you didn't request this, ignore this email.`;
+        const result = await sendViaGraph({
+          to: identifier,
+          subject: `Sign in to Medics WI Inventory`,
+          html,
+          text,
         });
-        if (!user?.passwordHash) return null;
-
-        // Lazy-import keeps bcrypt out of any code path that doesn't sign in.
-        const bcrypt = (await import("bcryptjs")).default;
-        const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
-        if (!ok) return null;
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          role: user.role,
-        };
+        if (!result.ok) {
+          throw new Error(`Magic-link email send failed: ${result.error ?? "unknown"}`);
+        }
       },
     }),
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-      ? [
-          Google({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            // Existing users get their role from DB; new Google sign-ups default to MEDIC.
-            allowDangerousEmailAccountLinking: true,
-          }),
-        ]
-      : []),
   ],
   callbacks: {
     ...authConfig.callbacks,
+    // On every JWT mint, ensure id + role are present. Role comes from DB so promotions
+    // take effect on the user's next sign-in (or session refresh).
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
