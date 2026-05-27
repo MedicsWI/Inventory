@@ -11,13 +11,21 @@
 import { use, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, LogOut, ArrowLeft, CircleCheck, Circle, UserPlus, X } from "lucide-react";
+import { ChevronLeft, LogOut, ArrowLeft, CircleCheck, Circle, UserPlus, X, Search, Shield, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EventGearDialog, type GearDialogSubmit } from "@/components/event-gear-dialog";
 import { cn } from "@/lib/utils";
+
+type VolunteerMatch = {
+  id: string;
+  type: "MEDICAL" | "SECURITY";
+  firstName: string;
+  lastName: string;
+  email: string;
+};
 
 type Cycle = {
   id: string;
@@ -53,25 +61,84 @@ export default function KioskPage({ params }: { params: Promise<{ id: string }> 
 
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [addingPerson, setAddingPerson] = useState(false);
-  const [newPersonName, setNewPersonName] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+  // "Quick new" form — almost always a security walk-in
+  const [quickNewOpen, setQuickNewOpen] = useState(false);
+  const [quickNew, setQuickNew] = useState<{
+    type: "MEDICAL" | "SECURITY";
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+  }>({ type: "SECURITY", firstName: "", lastName: "", email: "", phone: "" });
   const [gearDialog, setGearDialog] = useState<
     | { mode: "out"; category: string; soId: string }
     | { mode: "in"; category: string; soId: string; itemId: string; identifier: string | null }
     | null
   >(null);
 
-  const addPerson = useMutation({
-    mutationFn: (name: string) =>
+  // Live volunteer search — fires when the operator opens the add panel and types.
+  const { data: matches } = useQuery({
+    queryKey: ["volunteer-search", searchQ],
+    queryFn: () => api.get<VolunteerMatch[]>(`/api/volunteers?q=${encodeURIComponent(searchQ)}`),
+    enabled: addingPerson && searchQ.trim().length >= 2,
+  });
+
+  // Names already on this event — used to grey out duplicates in search results.
+  const existingVolunteerIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of data?.signOuts ?? []) {
+      // EventSignOut.volunteerId isn't on the kiosk SignOut type, but we can match
+      // by name as a soft check. Server still enforces nothing.
+      set.add(`${s.personName.toLowerCase()}`);
+    }
+    return set;
+  }, [data]);
+
+  // Add a sign-out by linking to a Volunteer record (preferred path)
+  const addFromVolunteer = useMutation({
+    mutationFn: (vId: string) =>
       api.post<{ id: string }>(`/api/events/${id}/sign-outs`, {
-        personName: name,
+        volunteerId: vId,
         role: "VOLUNTEER",
-        shifts: [], // empty = available to all shifts; manager can refine later on the full event page
+        shifts: [],
       }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["event", id] });
-      setNewPersonName("");
+      setSearchQ("");
       setAddingPerson(false);
-      // jump straight to the new person's gear view
+      setSelectedPersonId(r.id);
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+
+  // Walk-in path: create a Volunteer record, then add the sign-out linked to it.
+  const quickNewMut = useMutation({
+    mutationFn: async () => {
+      const v = await api.post<{ id: string; firstName: string; lastName: string }>(
+        "/api/volunteers",
+        {
+          type: quickNew.type,
+          firstName: quickNew.firstName.trim(),
+          lastName: quickNew.lastName.trim(),
+          email: quickNew.email.trim().toLowerCase(),
+          phone: quickNew.phone.trim() || null,
+        },
+      );
+      const so = await api.post<{ id: string }>(`/api/events/${id}/sign-outs`, {
+        volunteerId: v.id,
+        role: "VOLUNTEER",
+        shifts: [],
+      });
+      return so;
+    },
+    onSuccess: (r) => {
+      toast.success("Volunteer created and signed in");
+      qc.invalidateQueries({ queryKey: ["event", id] });
+      setQuickNewOpen(false);
+      setQuickNew({ type: "SECURITY", firstName: "", lastName: "", email: "", phone: "" });
+      setAddingPerson(false);
+      setSearchQ("");
       setSelectedPersonId(r.id);
     },
     onError: (e) => toast.error(String(e)),
@@ -177,35 +244,171 @@ export default function KioskPage({ params }: { params: Promise<{ id: string }> 
             )}
           </div>
 
-          {addingPerson && (
+          {addingPerson && !quickNewOpen && (
             <div className="rounded-xl border-2 border-primary bg-card p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <div className="font-semibold">New person</div>
-                <Button variant="ghost" size="icon" onClick={() => { setAddingPerson(false); setNewPersonName(""); }} aria-label="Cancel">
+                <div className="font-semibold">Find a volunteer</div>
+                <Button variant="ghost" size="icon" onClick={() => { setAddingPerson(false); setSearchQ(""); }} aria-label="Cancel">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={searchQ}
+                  onChange={(e) => setSearchQ(e.target.value)}
+                  placeholder="Type a name or email…"
+                  autoFocus
+                  className="h-12 text-lg pl-9"
+                />
+              </div>
+
+              {searchQ.trim().length < 2 ? (
+                <div className="text-sm text-muted-foreground text-center py-3">
+                  Type at least 2 letters to search the volunteer roster.
+                </div>
+              ) : !matches || matches.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-3">
+                  No match. Use <strong>New security walk-in</strong> below to add them.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-80 overflow-y-auto">
+                  {matches.map((v) => {
+                    const already = existingVolunteerIds.has(`${v.firstName} ${v.lastName}`.toLowerCase());
+                    return (
+                      <button
+                        key={v.id}
+                        disabled={already || addFromVolunteer.isPending}
+                        onClick={() => addFromVolunteer.mutate(v.id)}
+                        className={cn(
+                          "rounded-lg border-2 p-3 text-left transition-colors",
+                          already
+                            ? "opacity-50 cursor-not-allowed border-border bg-muted"
+                            : "border-border bg-card hover:bg-accent hover:border-primary",
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          {v.type === "SECURITY" ? (
+                            <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
+                          ) : (
+                            <Stethoscope className="h-4 w-4 text-muted-foreground shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="font-semibold truncate">
+                              {v.lastName}, {v.firstName}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">{v.email}</div>
+                          </div>
+                        </div>
+                        {already && (
+                          <div className="text-xs text-muted-foreground mt-1">Already signed in</div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="pt-2 border-t">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="w-full h-12"
+                  onClick={() => {
+                    // Pre-fill split name if the operator already typed something
+                    const t = searchQ.trim();
+                    let first = "", last = "";
+                    if (t.includes(",")) {
+                      const [ln, fn] = t.split(",").map((s) => s.trim());
+                      first = fn ?? ""; last = ln ?? "";
+                    } else if (t.includes(" ")) {
+                      const parts = t.split(/\s+/);
+                      first = parts[0] ?? "";
+                      last = parts.slice(1).join(" ");
+                    } else {
+                      first = t;
+                    }
+                    setQuickNew({ type: "SECURITY", firstName: first, lastName: last, email: "", phone: "" });
+                    setQuickNewOpen(true);
+                  }}
+                >
+                  <Shield className="h-4 w-4" /> New security walk-in
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {addingPerson && quickNewOpen && (
+            <div className="rounded-xl border-2 border-primary bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold">New walk-in</div>
+                <Button variant="ghost" size="icon" onClick={() => setQuickNewOpen(false)} aria-label="Back">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={quickNew.type === "SECURITY" ? "default" : "outline"}
+                  onClick={() => setQuickNew({ ...quickNew, type: "SECURITY" })}
+                >
+                  <Shield className="h-4 w-4" /> Security
+                </Button>
+                <Button
+                  type="button"
+                  variant={quickNew.type === "MEDICAL" ? "default" : "outline"}
+                  onClick={() => setQuickNew({ ...quickNew, type: "MEDICAL" })}
+                >
+                  <Stethoscope className="h-4 w-4" /> Medical
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="First name"
+                  value={quickNew.firstName}
+                  onChange={(e) => setQuickNew({ ...quickNew, firstName: e.target.value })}
+                  className="h-12 text-lg"
+                />
+                <Input
+                  placeholder="Last name"
+                  value={quickNew.lastName}
+                  onChange={(e) => setQuickNew({ ...quickNew, lastName: e.target.value })}
+                  className="h-12 text-lg"
+                />
+              </div>
               <Input
-                value={newPersonName}
-                onChange={(e) => setNewPersonName(e.target.value)}
-                placeholder="Full name"
-                autoFocus
+                placeholder="Email"
+                type="email"
+                value={quickNew.email}
+                onChange={(e) => setQuickNew({ ...quickNew, email: e.target.value })}
                 className="h-12 text-lg"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newPersonName.trim()) {
-                    e.preventDefault();
-                    addPerson.mutate(newPersonName.trim());
-                  }
-                }}
               />
+              <Input
+                placeholder="Phone (optional)  e.g. +19205551234"
+                value={quickNew.phone}
+                onChange={(e) => setQuickNew({ ...quickNew, phone: e.target.value })}
+                className="h-12 text-lg"
+              />
+
               <Button
                 size="lg"
                 className="w-full h-12 text-base"
-                onClick={() => newPersonName.trim() && addPerson.mutate(newPersonName.trim())}
-                disabled={!newPersonName.trim() || addPerson.isPending}
+                onClick={() => quickNewMut.mutate()}
+                disabled={
+                  quickNewMut.isPending ||
+                  !quickNew.firstName.trim() ||
+                  !quickNew.lastName.trim() ||
+                  !quickNew.email.trim()
+                }
               >
-                <UserPlus className="h-4 w-4" /> Add and start sign-out
+                <UserPlus className="h-4 w-4" /> {quickNewMut.isPending ? "Saving…" : "Save & start sign-out"}
               </Button>
+              <div className="text-xs text-muted-foreground">
+                Creates a permanent volunteer record. You can finish DOB, emergency contact,
+                and acknowledgments in the volunteer page later — they&apos;ll show on the daily missing-data digest.
+              </div>
             </div>
           )}
 
