@@ -23,6 +23,7 @@ export default auth((req) => {
     pathname.startsWith("/api/alerts/broadcast") ||
     pathname.startsWith("/api/alerts") ||
     pathname.startsWith("/api/alert-subscribers") ||
+    pathname === "/api/events" ||
     /^\/events\/[^/]+\/alert-signup\/?$/.test(pathname);
 
   if (isAuthRoute) {
