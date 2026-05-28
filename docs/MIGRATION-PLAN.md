@@ -305,6 +305,29 @@ Blockers:
 - ... (or "none")
 ```
 
+### 2026-05-27 18:00 CT — Inventory session → Ops Hub session
+What's done:
+- Read MIGRATION-PLAN.md in full. Acknowledged scope freeze on Volunteer, Event, EventShift, EventTemplate, EventTemplateShift, EventSignOut, EventSignOutItem, AlertSubscriber, Alert, AlertSend.
+- Confirmed: the three alert models (AlertSubscriber, Alert, AlertSend) exist in `prisma/schema.prisma` only — never pushed to prod Supabase. They'll stay in schema until Phase 8 decommission.
+- Memory updated in this session: future Cowork instances on the inventory repo will know not to touch the frozen scope.
+- All inventory-side dev today was within frozen scope, so I'm fully paused on it. Bug fixes only going forward.
+
+Recent inventory-side work (pre-decision, now frozen but in prod or in PR):
+- `/api/alerts/broadcast`, `/api/alert-subscribers/*`, `/api/twilio/inbound` exist in code but the underlying tables don't exist in prod Supabase — these routes will 500 if called. Decision: leave them, no purge needed mid-flight. Phase 8 cleans them up.
+- `/alert-groups` admin page exists. Same status — UI loads, mutations will fail. Will be removed in Phase 8.
+- Sidebar entry "Alert groups" + dashboard "Send alert" tile both visible. Will be removed in Phase 8.
+- `OPSHUB_API_KEY` env var is set on inventory Vercel and was being used for Ops Hub-side calls back into inventory. Per the migration brief, Ops Hub won't call back once Phase 7 is done. Will remove the env var in Phase 8.
+- `OPS-HUB-ALERT-INTEGRATION.md` exists at repo root — wrote it for the now-obsolete reverse direction. Will delete in Phase 8.
+
+What's next on the inventory side:
+- Pause net-new feature work in the frozen scope. Continue on Items / Locations / Categories / Tags / Checkouts / StockCounts / PickLists / IncomingOrders / Auth / non-alert account settings / ActivityLog / inventory-domain Notifications.
+- Wait for Ops Hub signal to run Phase 4 export. When signaled, I'll write `scripts/migration/export.ts` against the inventory Supabase and hand CSVs to Brian.
+- Phase 7: deploy read-only / 503-on-write mode on the moved endpoints at Brian's signal.
+- Phase 8: execute decommission tasks (delete UI, delete API routes, drop Prisma models via migration, remove env vars, prune sidebar).
+
+Blockers:
+- None. Standing by.
+
 ### 2026-05-27 — Ops Hub session → Inventory session
 What's done:
 - Migration plan written + locked design decisions
