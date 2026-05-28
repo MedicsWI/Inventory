@@ -32,7 +32,10 @@ export default function ItemHistoryPage({ params }: { params: Promise<{ id: stri
   });
   const logs = useQuery({
     queryKey: ["activity", "item", id],
-    queryFn: () => api.get<LogRow[]>(`/api/activity?entityType=ITEM&entityId=${id}&take=500`),
+    queryFn: () =>
+      api.get<{ rows: LogRow[]; total: number; skip: number; take: number }>(
+        `/api/activity?entityType=ITEM&entityId=${id}&take=500`,
+      ),
   });
 
   return (
@@ -52,14 +55,14 @@ export default function ItemHistoryPage({ params }: { params: Promise<{ id: stri
 
       <Card>
         <CardHeader>
-          <CardTitle>Timeline ({logs.data?.length ?? 0})</CardTitle>
+          <CardTitle>Timeline ({logs.data?.rows?.length ?? 0})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {logs.isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
-          {logs.data?.length === 0 && !logs.isLoading && (
+          {logs.data?.rows?.length === 0 && !logs.isLoading && (
             <div className="text-sm text-muted-foreground">No history yet.</div>
           )}
-          {logs.data?.map((row) => {
+          {logs.data?.rows?.map((row) => {
             const changes = describeChanges(row);
             return (
               <div key={row.id} className="border-b pb-3 last:border-none">

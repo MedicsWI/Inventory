@@ -10,6 +10,7 @@ import { DashboardStats } from "@/components/dashboard-stats";
 import { ItemCard, type ItemCardData } from "@/components/item-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { StatsSkeleton, ListSkeleton, RowsSkeleton } from "@/components/ui/skeleton";
+import { AttentionPanel } from "@/components/attention-panel";
 import { formatDate, actionLabel } from "@/lib/utils";
 
 type DashboardData = {
@@ -55,6 +56,10 @@ export default function DashboardPage() {
           )}
         </div>
       </header>
+
+      {/* Triage panel — only renders when something needs attention. Lives above
+          the stats so urgent items are the first thing anyone sees on login. */}
+      <AttentionPanel />
 
       {isLoading ? (
         <StatsSkeleton />

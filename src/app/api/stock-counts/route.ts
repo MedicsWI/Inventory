@@ -33,9 +33,26 @@ export async function GET(req: Request) {
       location: { select: { id: true, name: true } },
       assignedTo: { select: { id: true, name: true, email: true } },
       _count: { select: { lines: true } },
+      // Pull just enough line data to compute discrepancy summaries for the list page.
+      lines: { select: { expectedQty: true, actualQty: true } },
     },
   });
-  return NextResponse.json(rows);
+
+  // Compute lightweight discrepancy summaries per row so the list shows them
+  // without each card making its own query.
+  const enriched = rows.map((row) => {
+    const discrepancyCount = row.lines.filter(
+      (l) => l.actualQty != null && l.actualQty !== l.expectedQty,
+    ).length;
+    const unitsOff = row.lines.reduce((sum, l) => {
+      if (l.actualQty == null) return sum;
+      return sum + Math.abs(l.actualQty - l.expectedQty);
+    }, 0);
+    const { lines: _, ...rest } = row;
+    return { ...rest, discrepancyCount, unitsOff };
+  });
+
+  return NextResponse.json(enriched);
 }
 
 export async function POST(req: Request) {

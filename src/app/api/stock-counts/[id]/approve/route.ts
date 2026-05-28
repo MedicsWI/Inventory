@@ -1,4 +1,10 @@
-// /api/stock-counts/[id]/approve — manager applies discrepancies, completes count
+// /api/stock-counts/[id]/approve — manager applies discrepancies, completes count.
+//
+// Writes:
+//   1. Item quantity updates inside a transaction.
+//   2. An ADJUST_QTY activity row per item changed — so the activity log links
+//      stock-count adjustments back to specific items (and so item history pages
+//      show "adjusted via stock count <name>"). Bulk audit log entry stays too.
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -16,19 +22,18 @@ export async function POST(_req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
   const count = await prisma.stockCount.findUnique({
     where: { id },
-    include: { lines: true },
+    include: { lines: { include: { item: { select: { id: true, name: true } } } } },
   });
   if (!count) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (count.status !== "REVIEW") {
     return NextResponse.json({ error: `Can only approve from REVIEW; this is ${count.status}.` }, { status: 400 });
   }
 
-  // Apply each line's actualQty to the item, recording an activity per discrepancy
   const discrepancies = count.lines.filter((l) => l.actualQty != null && l.actualQty !== l.expectedQty);
 
   await prisma.$transaction(async (tx) => {
     for (const line of count.lines) {
-      if (line.actualQty == null) continue;          // uncounted lines stay as-is
+      if (line.actualQty == null) continue;
       if (line.actualQty === line.expectedQty) continue;
       await tx.item.update({
         where: { id: line.itemId },
@@ -45,6 +50,24 @@ export async function POST(_req: Request, ctx: Ctx) {
     });
   });
 
+  // Per-item audit entry so item history shows the stock-count source.
+  for (const line of discrepancies) {
+    await logActivity({
+      userId: session.user.id,
+      action: "ADJUST_QTY",
+      entityType: "ITEM",
+      entityId: line.itemId,
+      before: { quantity: line.expectedQty },
+      after: { quantity: line.actualQty },
+      metadata: {
+        source: "STOCK_COUNT",
+        stockCountId: id,
+        stockCountName: count.name,
+        delta: (line.actualQty ?? 0) - line.expectedQty,
+      },
+    });
+  }
+
   await logActivity({
     userId: session.user.id,
     action: "STOCK_COUNT_APPROVE",
@@ -54,6 +77,7 @@ export async function POST(_req: Request, ctx: Ctx) {
       totalLines: count.lines.length,
       discrepancies: discrepancies.length,
       uncounted: count.lines.filter((l) => l.actualQty == null).length,
+      countName: count.name,
     },
   });
 

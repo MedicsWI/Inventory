@@ -24,6 +24,8 @@ type Row = {
   location: { id: string; name: string } | null;
   assignedTo: { id: string; name: string | null; email: string } | null;
   _count: { lines: number };
+  discrepancyCount: number;
+  unitsOff: number;
 };
 
 type Lookup = { id: string; name: string }[];
@@ -156,11 +158,16 @@ export default function StockCountsPage() {
               href={`/stock-counts/${c.id}`}
               className="flex items-center justify-between gap-3 rounded-md border p-3 hover:bg-accent transition-colors"
             >
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium truncate">{c.name}</span>
                   <Badge variant={statusColors[c.status]}>{c.status.replace("_", " ")}</Badge>
                   {c.status === "DRAFT" && <Badge variant="outline"><Play className="h-3 w-3 mr-1" />ready to start</Badge>}
+                  {c.discrepancyCount > 0 && (c.status === "IN_PROGRESS" || c.status === "REVIEW") && (
+                    <Badge variant="warn">
+                      {c.discrepancyCount} off · {c.unitsOff} units
+                    </Badge>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {c.location ? `Scope: ${c.location.name}` : "Scope: all locations"}

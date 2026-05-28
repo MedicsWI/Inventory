@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
-import { ChevronLeft, Play, Send, Check, Search } from "lucide-react";
+import { ChevronLeft, Play, Send, Check, Search, RotateCcw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,7 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
   const { data: session } = useSession();
   const isAdmin = session?.user.role === "ADMIN" || session?.user.role === "MANAGER";
   const [q, setQ] = useState("");
+  const [discrepanciesOnly, setDiscrepanciesOnly] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["stock-count", id],
@@ -77,8 +78,18 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
       qc.invalidateQueries({ queryKey: ["stock-count", id] });
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
       const applied = (r as { applied?: number })?.applied ?? 0;
       toast.success(`Approved. ${applied} item${applied === 1 ? "" : "s"} adjusted.`);
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+
+  const reject = useMutation({
+    mutationFn: (reason?: string) => api.post(`/api/stock-counts/${id}/reject`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stock-count", id] });
+      toast.success("Sent back to IN_PROGRESS for recount.");
     },
     onError: (e) => toast.error(String(e)),
   });
@@ -93,12 +104,21 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>;
   if (!data) return <div>Not found.</div>;
 
-  const filtered = data.lines.filter(
-    (l) => !q || l.item.name.toLowerCase().includes(q.toLowerCase()) || (l.item.barcode ?? "").toLowerCase().includes(q.toLowerCase()),
-  );
+  const allDiscrepancies = data.lines.filter((l) => l.actualQty != null && l.actualQty !== l.expectedQty);
+  const filtered = data.lines.filter((l) => {
+    if (discrepanciesOnly && (l.actualQty == null || l.actualQty === l.expectedQty)) return false;
+    if (!q) return true;
+    return l.item.name.toLowerCase().includes(q.toLowerCase()) || (l.item.barcode ?? "").toLowerCase().includes(q.toLowerCase());
+  });
 
   const countedLines = data.lines.filter((l) => l.actualQty != null).length;
-  const discrepancyLines = data.lines.filter((l) => l.actualQty != null && l.actualQty !== l.expectedQty).length;
+  const discrepancyLines = allDiscrepancies.length;
+  const totalUnitsOver = allDiscrepancies
+    .filter((l) => (l.actualQty ?? 0) > l.expectedQty)
+    .reduce((sum, l) => sum + ((l.actualQty ?? 0) - l.expectedQty), 0);
+  const totalUnitsShort = allDiscrepancies
+    .filter((l) => (l.actualQty ?? 0) < l.expectedQty)
+    .reduce((sum, l) => sum + (l.expectedQty - (l.actualQty ?? 0)), 0);
 
   return (
     <div className="space-y-4">
@@ -136,9 +156,29 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
             </Button>
           )}
           {data.status === "REVIEW" && isAdmin && (
-            <Button onClick={() => approve.mutate()} disabled={approve.isPending}>
-              <Check className="h-4 w-4" /> Approve + adjust stock
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const reason = window.prompt("Reason for sending back? (optional)");
+                  if (reason !== null) reject.mutate(reason || undefined);
+                }}
+                disabled={reject.isPending}
+              >
+                <RotateCcw className="h-4 w-4" /> Reject &amp; recount
+              </Button>
+              <Button
+                onClick={() => {
+                  const msg = discrepancyLines > 0
+                    ? `Approve will adjust ${discrepancyLines} item${discrepancyLines === 1 ? "" : "s"} to the counted quantities. Continue?`
+                    : "No discrepancies to apply. Approve anyway?";
+                  if (window.confirm(msg)) approve.mutate();
+                }}
+                disabled={approve.isPending}
+              >
+                <Check className="h-4 w-4" /> Approve + adjust stock
+              </Button>
+            </>
           )}
         </div>
       </header>
@@ -163,14 +203,46 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
             <Stat label="Discrepancies" value={discrepancyLines} variant={discrepancyLines > 0 ? "warn" : undefined} />
           </div>
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Filter by item name or barcode…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="pl-9"
-            />
+          {discrepancyLines > 0 && (
+            <Card className="border-warn/60 bg-warn/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-warn" />
+                  Discrepancy summary
+                </CardTitle>
+                <CardDescription>
+                  {discrepancyLines} item{discrepancyLines === 1 ? "" : "s"} differ from expected.
+                  {data.status === "REVIEW" && " Approve to adjust stock to counted values, or send back for recount."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <Mini label="Items off" value={discrepancyLines} />
+                  <Mini label="Units over" value={`+${totalUnitsOver}`} accent="warn" />
+                  <Mini label="Units short" value={`-${totalUnitsShort}`} accent="danger" />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Filter by item name or barcode…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              variant={discrepanciesOnly ? "default" : "outline"}
+              onClick={() => setDiscrepanciesOnly(!discrepanciesOnly)}
+              disabled={discrepancyLines === 0}
+            >
+              <AlertTriangle className="h-4 w-4" />
+              {discrepanciesOnly ? "Show all" : `Discrepancies only (${discrepancyLines})`}
+            </Button>
           </div>
 
           <Card>
@@ -178,7 +250,9 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
             <CardContent className="space-y-1">
               {filtered.length === 0 && (
                 <div className="text-sm text-muted-foreground py-4 text-center">
-                  {q ? `No lines match "${q}".` : "No lines on this count yet."}
+                  {discrepanciesOnly
+                    ? "No discrepancies match — try clearing the filter."
+                    : q ? `No lines match "${q}".` : "No lines on this count yet."}
                 </div>
               )}
               {filtered.map((line) => (
@@ -193,6 +267,17 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
           </Card>
         </>
       )}
+    </div>
+  );
+}
+
+function Mini({ label, value, accent }: { label: string; value: number | string; accent?: "warn" | "danger" }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`text-xl font-bold tabular-nums ${accent === "warn" ? "text-warn" : accent === "danger" ? "text-destructive" : ""}`}>
+        {value}
+      </div>
     </div>
   );
 }
