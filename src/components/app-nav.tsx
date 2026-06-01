@@ -78,7 +78,7 @@ const groups: Group[] = [
     dot: "bg-violet-400",
     text: "text-violet-300",
     items: [
-      { href: "/events", label: "Events", icon: CalendarDays },
+      // /events moved to Ops Hub on 05/27/2026 (Phase 7 cutover).
       { href: "/labels", label: "QR labels", icon: QrCode },
       { href: "/pick-lists", label: "Pick lists", icon: ListChecks },
       { href: "/stock-counts", label: "Stock counts", icon: ClipboardCheck },
@@ -109,8 +109,7 @@ const groups: Group[] = [
     text: "text-red-300",
     adminOnly: true,
     items: [
-      { href: "/volunteers", label: "Volunteers", icon: Users },
-      { href: "/alert-groups", label: "Alert groups", icon: Megaphone },
+      // /volunteers + /alert-groups moved to Ops Hub on 05/27/2026 (Phase 7 cutover).
       { href: "/admin/checkouts", label: "All checkouts", icon: PackageCheck },
       { href: "/admin", label: "Settings & users", icon: Settings },
     ],
@@ -224,11 +223,7 @@ export function AppNav() {
           </div>
           <ThemeToggle />
         </div>
-        <Button asChild variant="ghost" className="w-full justify-start mb-1">
-          <Link href="/account/alerts">
-            <Bell className="h-4 w-4" /> Alert settings
-          </Link>
-        </Button>
+        {/* /account/alerts moved to Ops Hub on 05/27/2026 (Phase 7 cutover). */}
         <Button asChild variant="ghost" className="w-full justify-start mb-1">
           <Link href="/account/password">
             <KeyRound className="h-4 w-4" /> Change password

@@ -4,27 +4,72 @@ import { authConfig } from "@/lib/auth.config";
 
 const { auth } = NextAuth(authConfig);
 
+// Phase 7 cutover (Ops Hub task #130). Moved API + UI paths are intercepted
+// here so users / external callers always see the right thing:
+//   - API paths → return 503 with a JSON pointer to the Ops Hub
+//   - UI paths  → redirect to /moved which shows a friendly "this has moved" page
+// Once Phase 8 decommission lands (delete the underlying code), these lists go
+// away too.
+const MOVED_API_PREFIXES = [
+  "/api/events",
+  "/api/volunteers",
+  "/api/alert-subscribers",
+  "/api/alerts",
+];
+const MOVED_API_EXACT = ["/api/twilio/inbound"];
+
+function isMovedApi(pathname: string): boolean {
+  if (MOVED_API_EXACT.includes(pathname)) return true;
+  return MOVED_API_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
+  );
+}
+
+function isMovedUi(pathname: string): boolean {
+  return (
+    pathname === "/events" ||
+    pathname.startsWith("/events/") ||
+    pathname === "/volunteers" ||
+    pathname.startsWith("/volunteers/") ||
+    pathname === "/event-templates" ||
+    pathname.startsWith("/event-templates/") ||
+    pathname === "/alert-groups" ||
+    pathname.startsWith("/alert-groups/") ||
+    pathname.startsWith("/account/alerts")
+  );
+}
+
+const OPS_HUB_URL = "https://ops.medicswisconsin.com";
+
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
   const { pathname } = req.nextUrl;
 
-  // Routes that should never trigger a login redirect:
-  //   - login + auth callbacks
-  //   - cron endpoints (bearer-authed)
-  //   - public alert-subscriber QR signup page + endpoint
-  //   - Twilio inbound webhook (must be reachable by Twilio with no cookie)
+  // 1. Moved API endpoints — 503 with a pointer. Runs before auth so external
+  //    callers (Twilio webhook, Ops Hub server) don't see a login redirect.
+  if (isMovedApi(pathname)) {
+    return NextResponse.json(
+      {
+        error: "Moved",
+        message: "This endpoint has moved to the Medics Wisconsin Operations Hub.",
+        opsHubUrl: OPS_HUB_URL,
+      },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  // 2. Moved UI paths — redirect to the /moved banner page (no login needed).
+  //    307 preserves the method for any odd-shaped GET that landed here.
+  if (isMovedUi(pathname)) {
+    return NextResponse.redirect(new URL("/moved", req.nextUrl), 307);
+  }
+
+  // Routes that should never trigger a login redirect.
   const isAuthRoute =
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
     pathname === "/api/notifications/check" ||
-    pathname === "/api/volunteers/missing-data-alert" ||
-    pathname === "/api/alert-subscribers/signup" ||
-    pathname === "/api/twilio/inbound" ||
-    pathname.startsWith("/api/alerts/broadcast") ||
-    pathname.startsWith("/api/alerts") ||
-    pathname.startsWith("/api/alert-subscribers") ||
-    pathname === "/api/events" ||
-    /^\/events\/[^/]+\/alert-signup\/?$/.test(pathname);
+    pathname === "/moved";
 
   if (isAuthRoute) {
     if (isLoggedIn && pathname.startsWith("/login")) {

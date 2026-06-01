@@ -135,9 +135,8 @@ export default function IntegrationsPage() {
               <AlertCircle className="h-3 w-3" /> Not configured
             </Badge>
           )}
-          <Button asChild size="sm" variant="outline">
-            <Link href="/account/alerts">Open Alert settings</Link>
-          </Button>
+          {/* /account/alerts moved to Ops Hub on 05/27/2026 (Phase 7 cutover).
+              Users manage per-channel preferences from there now. */}
         </CardContent>
       </Card>
 

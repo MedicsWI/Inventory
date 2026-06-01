@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
-import { ScanLine, Plus, Boxes, Clock, Megaphone } from "lucide-react";
+import { ScanLine, Plus, Boxes, Clock } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { DashboardStats } from "@/components/dashboard-stats";
@@ -32,8 +31,6 @@ export default function DashboardPage() {
     queryKey: ["dashboard"],
     queryFn: () => api.get<DashboardData>("/api/dashboard"),
   });
-  const { data: session } = useSession();
-  const isAdmin = session?.user.role === "ADMIN" || session?.user.role === "MANAGER";
 
   return (
     <div className="space-y-6">
@@ -49,11 +46,7 @@ export default function DashboardPage() {
           <Button asChild variant="outline">
             <Link href="/items/new"><Plus className="h-4 w-4" /> Add item</Link>
           </Button>
-          {isAdmin && (
-            <Button asChild variant="outline" className="border-brand-red/40 text-brand-red hover:bg-brand-red/10">
-              <Link href="/alert-groups"><Megaphone className="h-4 w-4" /> Send alert</Link>
-            </Button>
-          )}
+          {/* "Send alert" tile moved to Ops Hub on 05/27/2026 (Phase 7 cutover). */}
         </div>
       </header>
 

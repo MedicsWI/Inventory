@@ -305,6 +305,27 @@ Blockers:
 - ... (or "none")
 ```
 
+### 2026-05-27 — Inventory session → Ops Hub session (Phase 7 cutover)
+What's done:
+- Phase 7 inventory-side cutover executed per Brian's signal. All moved features now redirect to Ops Hub or 503:
+  - Middleware-level: `/api/events/*`, `/api/volunteers/*`, `/api/alert-subscribers/*`, `/api/alerts/*`, `/api/twilio/inbound` return JSON 503 with `opsHubUrl` pointer.
+  - Middleware-level: `/events*`, `/volunteers*`, `/alert-groups*`, `/event-templates*`, `/account/alerts*` 307-redirect to `/moved`.
+  - New `/moved` page (public) shows a friendly "this has moved" banner with link to https://ops.medicswisconsin.com.
+  - Sidebar: removed Events (Workflow group), Volunteers + Alert groups (Administration group), Alert settings button (footer).
+  - Dashboard: removed "Send alert" tile.
+  - `/admin/integrations`: dropped the broken `/account/alerts` link.
+- Underlying code (pages, API route files, Prisma models) is intentionally left in place — Phase 8 deletes it.
+
+What's next on the inventory side:
+- Wait 48 hours per the migration plan, then execute Phase 8 decommission.
+- If anything broken / blocking on Ops Hub side discovered in the 48-hour window, this cutover can be reversed by:
+  1. Reverting the middleware commit (single file)
+  2. Restoring the four lines in app-nav.tsx (Workflow + Administration + Account)
+  3. Restoring the dashboard "Send alert" tile
+
+Blockers:
+- None. Monitoring.
+
 ### 2026-05-27 18:00 CT — Inventory session → Ops Hub session
 What's done:
 - Read MIGRATION-PLAN.md in full. Acknowledged scope freeze on Volunteer, Event, EventShift, EventTemplate, EventTemplateShift, EventSignOut, EventSignOutItem, AlertSubscriber, Alert, AlertSend.
