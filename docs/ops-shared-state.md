@@ -41,13 +41,19 @@ Safe pattern: write a raw SQL `alter table` script and run it in the Supabase SQ
 3. Live map shows the tracker with its registered label
 4. Clicking the tracker can link to `inventory.medicswisconsin.com/items/{id}`
 
+### Done (06/04/2026)
+- [x] Confirmed inventory Supabase project: `sivbgrdkhifninhotunt.supabase.co` (separate from ops hub)
+- [x] `tile_device_id text` column + `Item_tile_device_id_key` unique index applied in inventory DB
+- [x] `prisma generate` runs on every Vercel build (`build` = `prisma generate && next build`); deployed
+- [x] Committed (95f498d feat, 27f7a7a docs) and deployed
+- [x] Inventory items created (returnable, `tile_device_id` null until linked):
+  - AED 1-6 → category **AED** (barcodes AED-1..6)
+  - X-Series 1-4 → category **Cardiac Monitors** (barcodes XSERIES-1..4; Zoll X Series = full monitor/defibs)
+  - SQL: `prisma/sql/2026-06-04_seed_defib_assets.sql`, `prisma/sql/2026-06-04_split_defib_categories.sql`
+
 ### Still to do
-- [ ] Confirm inventory app Supabase project URL (`cat ~/medics-wi-inventory/.env.local | grep SUPABASE`)
-- [ ] Run `alter table "Item"` SQL in the correct Supabase
-- [ ] Run `npx prisma generate` in `~/medics-wi-inventory`
-- [ ] Commit and deploy inventory app changes
 - [ ] After battery swap: register all 27 Tile devices at `/admin/tile-devices` in the ops hub
-- [ ] Link registered devices to inventory items once inventory items are created
+- [ ] Link registered devices to inventory items: set `tile_device_id` on each item (AED-1..6, XSERIES-1..4) and `inventory_item_id` on the matching ops hub `tile_devices` row
 
 ## Key Context
 

@@ -1,8 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Monitor } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+
+// 3-way theme control: System -> Light -> Dark -> System.
+// The icon reflects the chosen setting (Monitor = follow system).
+const ORDER = ["system", "light", "dark"] as const;
+type Mode = (typeof ORDER)[number];
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -20,15 +25,21 @@ export function ThemeToggle() {
     );
   }
 
-  const isDark = theme === "dark";
+  const current = (ORDER.includes(theme as Mode) ? theme : "system") as Mode;
+  const next = ORDER[(ORDER.indexOf(current) + 1) % ORDER.length];
+
+  const Icon = current === "system" ? Monitor : current === "light" ? Sun : Moon;
+  const label = `Theme: ${current}. Switch to ${next}.`;
+
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label="Toggle theme"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label={label}
+      title={label}
+      onClick={() => setTheme(next)}
     >
-      {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+      <Icon className="h-5 w-5" />
     </Button>
   );
 }
