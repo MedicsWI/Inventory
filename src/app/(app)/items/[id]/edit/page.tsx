@@ -21,6 +21,7 @@ type Loaded = {
   notes?: string | null;
   photoUrl?: string | null;
   returnable?: boolean;
+  tileDeviceId?: string | null;
   tags?: { id: string; name: string }[];
 };
 
@@ -50,6 +51,7 @@ export default function EditItemPage({ params }: { params: Promise<{ id: string 
     notes: data.notes ?? "",
     photoUrl: data.photoUrl ?? null,
     returnable: data.returnable ?? false,
+    tileDeviceId: data.tileDeviceId ?? "",
     tagIds: (data.tags ?? []).map((t) => t.id),
   };
 

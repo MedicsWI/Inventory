@@ -21,6 +21,7 @@ const createSchema = z.object({
   locationId: z.string().cuid().optional().nullable(),
   categoryId: z.string().cuid().optional().nullable(),
   returnable: z.boolean().optional(),
+  tileDeviceId: z.string().optional().nullable(),
   tagIds: z.array(z.string().cuid()).optional(),
 });
 

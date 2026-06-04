@@ -25,7 +25,7 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
-  passwordHash  String?   // optional, only for credentials login
+  passwordHash  String? // optional, only for credentials login
   role          Role      @default(MEDIC)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -41,19 +41,19 @@ model User {
   // E.164 phone number for SMS alerts (e.g. +14145551234). Required only for SMS.
   phone                   String?
 
-  accounts             Account[]
-  sessions             Session[]
-  activityLogs         ActivityLog[]
-  notifications        Notification[]
-  checkouts            Checkout[]
-  assignedStockCounts  StockCount[]    @relation("StockCountAssignee")
-  approvedStockCounts  StockCount[]    @relation("StockCountApprover")
-  assignedPickLists    PickList[]      @relation("PickListAssignee")
-  completedPickLists   PickList[]      @relation("PickListCompleter")
-  pushSubscriptions    PushSubscription[]
-  eventSignOuts        EventSignOut[]
-  verifiedVolunteers   Volunteer[]     @relation("VolunteerCredVerifier")
-  sentAlerts           Alert[]
+  accounts            Account[]
+  sessions            Session[]
+  activityLogs        ActivityLog[]
+  notifications       Notification[]
+  checkouts           Checkout[]
+  assignedStockCounts StockCount[]       @relation("StockCountAssignee")
+  approvedStockCounts StockCount[]       @relation("StockCountApprover")
+  assignedPickLists   PickList[]         @relation("PickListAssignee")
+  completedPickLists  PickList[]         @relation("PickListCompleter")
+  pushSubscriptions   PushSubscription[]
+  eventSignOuts       EventSignOut[]
+  verifiedVolunteers  Volunteer[]        @relation("VolunteerCredVerifier")
+  sentAlerts          Alert[]
 }
 
 model Account {
@@ -97,10 +97,10 @@ model PushSubscription {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String   @unique  // unique URL provided by the browser's push service
-  p256dh    String              // public key
-  auth      String              // auth secret
-  userAgent String?             // for display in the settings UI
+  endpoint  String   @unique // unique URL provided by the browser's push service
+  p256dh    String // public key
+  auth      String // auth secret
+  userAgent String? // for display in the settings UI
   createdAt DateTime @default(now())
 
   @@index([userId])
@@ -109,32 +109,32 @@ model PushSubscription {
 // -------------------- Inventory --------------------
 
 enum LocationType {
-  STATION   // physical station / building
-  VEHICLE   // ambulance / truck
-  BOX       // storage box / tote
-  KIT       // jump bag / trauma kit
-  SHELF     // shelf / bin
+  STATION // physical station / building
+  VEHICLE // ambulance / truck
+  BOX // storage box / tote
+  KIT // jump bag / trauma kit
+  SHELF // shelf / bin
 }
 
 model Location {
-  id          String       @id @default(cuid())
-  name        String
-  type        LocationType
-  barcode     String?      @unique   // for label-on-box scanning
-  notes       String?
-  photoUrl    String?
+  id       String       @id @default(cuid())
+  name     String
+  type     LocationType
+  barcode  String?      @unique // for label-on-box scanning
+  notes    String?
+  photoUrl String?
 
   // Self-referential nesting (Sortly-style)
-  parentId    String?
-  parent      Location?    @relation("LocationToChildren", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Location[]   @relation("LocationToChildren")
+  parentId String?
+  parent   Location?  @relation("LocationToChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children Location[] @relation("LocationToChildren")
 
   items       Item[]
   stockCounts StockCount[]
   pickLists   PickList[]
 
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([parentId])
   @@index([type])
@@ -143,7 +143,7 @@ model Location {
 model Category {
   id        String   @id @default(cuid())
   name      String   @unique
-  color     String?  // hex, for tags
+  color     String? // hex, for tags
   items     Item[]
   createdAt DateTime @default(now())
 }
@@ -157,34 +157,41 @@ model Tag {
 }
 
 model Item {
-  id                 String    @id @default(cuid())
-  name               String
-  description        String?
-  sku                String?   // internal code
-  barcode            String?   @unique
-  quantity           Int       @default(0)   // AVAILABLE quantity (excludes active checkouts)
-  unit               String?   // "each", "box", "ml" — display only
-  lotNumber          String?
-  expirationDate     DateTime?
-  lowStockThreshold  Int?      // null = no alert
-  photoUrl           String?
-  notes              String?
-  returnable         Boolean   @default(false)  // true = equipment that's borrowed/returned (BP cuff, glucometer)
+  id                String    @id @default(cuid())
+  name              String
+  description       String?
+  sku               String? // internal code
+  barcode           String?   @unique
+  quantity          Int       @default(0) // AVAILABLE quantity (excludes active checkouts)
+  unit              String? // "each", "box", "ml" — display only
+  lotNumber         String?
+  expirationDate    DateTime?
+  lowStockThreshold Int? // null = no alert
+  photoUrl          String?
+  notes             String?
+  returnable        Boolean   @default(false) // true = equipment that's borrowed/returned (BP cuff, glucometer)
+
+  // Tile Bluetooth tracker hardware ID, linking this asset to the ops hub `tile_devices`
+  // registry (AEDs, med carts, equipment). Loose reference — `tile_devices` is owned by the
+  // ops hub app and is NOT a Prisma-managed table, so no FK is declared here.
+  // @unique = one tracker maps to at most one item. Column is snake_case to match the
+  // shared cross-app convention (ops hub uses `tile_device_id`).
+  tileDeviceId String? @unique @map("tile_device_id")
 
   // Relations
-  locationId         String?
-  location           Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  categoryId         String?
-  category           Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  tags               Tag[]     @relation("ItemTags")
-  checkouts          Checkout[]
-  stockCountLines    StockCountLine[]
-  incomingOrderLines IncomingOrderLine[]
-  pickListLines      PickListLine[]
+  locationId            String?
+  location              Location?              @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  categoryId            String?
+  category              Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags                  Tag[]                  @relation("ItemTags")
+  checkouts             Checkout[]
+  stockCountLines       StockCountLine[]
+  incomingOrderLines    IncomingOrderLine[]
+  pickListLines         PickListLine[]
   pickListTemplateItems PickListTemplateItem[]
 
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([locationId])
   @@index([categoryId])
@@ -195,35 +202,35 @@ model Item {
 // -------------------- Stock counts (physical inventory verification) --------------------
 
 enum StockCountStatus {
-  DRAFT          // being set up
-  IN_PROGRESS    // counter is recording counts
-  REVIEW         // counts in, waiting for manager approval
-  COMPLETED      // approved & qty adjustments applied
+  DRAFT // being set up
+  IN_PROGRESS // counter is recording counts
+  REVIEW // counts in, waiting for manager approval
+  COMPLETED // approved & qty adjustments applied
   CANCELED
 }
 
 model StockCount {
-  id            String           @id @default(cuid())
-  name          String           // e.g. "Q1 Trauma Kit A count"
-  status        StockCountStatus @default(DRAFT)
-  notes         String?
+  id     String           @id @default(cuid())
+  name   String // e.g. "Q1 Trauma Kit A count"
+  status StockCountStatus @default(DRAFT)
+  notes  String?
 
-  locationId    String?
-  location      Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
-  assignedToId  String?
-  assignedTo    User?            @relation("StockCountAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId String?
+  assignedTo   User?   @relation("StockCountAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
 
-  approvedById  String?
-  approvedBy    User?            @relation("StockCountApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedById String?
+  approvedBy   User?   @relation("StockCountApprover", fields: [approvedById], references: [id], onDelete: SetNull)
 
-  startedAt     DateTime?
-  completedAt   DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
 
-  lines         StockCountLine[]
+  lines StockCountLine[]
 
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([assignedToId])
@@ -231,16 +238,16 @@ model StockCount {
 }
 
 model StockCountLine {
-  id            String     @id @default(cuid())
-  stockCountId  String
-  stockCount    StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
-  itemId        String
-  item          Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  stockCountId String
+  stockCount   StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  itemId       String
+  item         Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
-  expectedQty   Int        // snapshot taken when the count was started
-  actualQty     Int?       // null until counter records a value
-  countedAt     DateTime?
-  notes         String?
+  expectedQty Int // snapshot taken when the count was started
+  actualQty   Int? // null until counter records a value
+  countedAt   DateTime?
+  notes       String?
 
   @@unique([stockCountId, itemId])
   @@index([stockCountId])
@@ -249,38 +256,38 @@ model StockCountLine {
 // -------------------- Incoming orders (vendor / online) --------------------
 
 enum IncomingOrderStatus {
-  DRAFT      // PO being assembled, not yet sent to vendor
-  ORDERED    // sent to vendor, awaiting shipment
+  DRAFT // PO being assembled, not yet sent to vendor
+  ORDERED // sent to vendor, awaiting shipment
   SHIPPED
-  PARTIAL    // some lines received
-  RECEIVED   // all lines received
+  PARTIAL // some lines received
+  RECEIVED // all lines received
   CANCELED
 }
 
 model IncomingOrder {
-  id            String              @id @default(cuid())
-  vendor        String              // free text, e.g. "Bound Tree", "Henry Schein"
+  id     String @id @default(cuid())
+  vendor String // free text, e.g. "Bound Tree", "Henry Schein"
 
   // Vendor contact info (for outbound PO emails)
   vendorEmail   String?
-  vendorContact String?             // contact person name
+  vendorContact String? // contact person name
   vendorPhone   String?
 
-  orderNumber   String?             // vendor-side PO/order #
-  trackingUrl   String?             // shipment tracking link
-  status        IncomingOrderStatus @default(DRAFT)
-  orderedAt     DateTime            @default(now())
-  expectedAt    DateTime?
-  receivedAt    DateTime?
-  sentAt        DateTime?           // when the PO was emailed to vendor
+  orderNumber String? // vendor-side PO/order #
+  trackingUrl String? // shipment tracking link
+  status      IncomingOrderStatus @default(DRAFT)
+  orderedAt   DateTime            @default(now())
+  expectedAt  DateTime?
+  receivedAt  DateTime?
+  sentAt      DateTime? // when the PO was emailed to vendor
 
-  notes         String?             // internal notes (visible in app only)
-  vendorNotes   String?             // notes/instructions printed on the PO sent to vendor
+  notes       String? // internal notes (visible in app only)
+  vendorNotes String? // notes/instructions printed on the PO sent to vendor
 
-  lines         IncomingOrderLine[]
+  lines IncomingOrderLine[]
 
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([expectedAt])
@@ -291,13 +298,13 @@ model IncomingOrderLine {
   incomingOrderId String
   incomingOrder   IncomingOrder @relation(fields: [incomingOrderId], references: [id], onDelete: Cascade)
 
-  itemId          String?       // optional link to an existing Item
-  item            Item?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
-  name            String        // free text — what the vendor calls it
-  sku             String?
-  expectedQty     Int
-  receivedQty     Int           @default(0)
-  unitCost        Float?        // optional per-unit price (USD) for the PO
+  itemId      String? // optional link to an existing Item
+  item        Item?   @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  name        String // free text — what the vendor calls it
+  sku         String?
+  expectedQty Int
+  receivedQty Int     @default(0)
+  unitCost    Float? // optional per-unit price (USD) for the PO
 
   @@index([incomingOrderId])
 }
@@ -322,8 +329,8 @@ model PickListTemplate {
   items       PickListTemplateItem[]
   spawned     PickList[]
 
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model PickListTemplateItem {
@@ -339,43 +346,43 @@ model PickListTemplateItem {
 }
 
 model PickList {
-  id             String            @id @default(cuid())
-  name           String
-  status         PickListStatus    @default(DRAFT)
+  id     String         @id @default(cuid())
+  name   String
+  status PickListStatus @default(DRAFT)
 
   fromLocationId String?
-  fromLocation   Location?         @relation(fields: [fromLocationId], references: [id], onDelete: SetNull)
-  destination    String?           // free text — "Medic 12", "Event prep tomorrow", etc.
+  fromLocation   Location? @relation(fields: [fromLocationId], references: [id], onDelete: SetNull)
+  destination    String? // free text — "Medic 12", "Event prep tomorrow", etc.
   notes          String?
 
-  templateId     String?           // set if this list was spawned from a template
-  template       PickListTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateId String? // set if this list was spawned from a template
+  template   PickListTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
-  assignedToId   String?
-  assignedTo     User?             @relation("PickListAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  completedById  String?
-  completedBy    User?             @relation("PickListCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  assignedToId  String?
+  assignedTo    User?   @relation("PickListAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  completedById String?
+  completedBy   User?   @relation("PickListCompleter", fields: [completedById], references: [id], onDelete: SetNull)
 
-  startedAt      DateTime?
-  completedAt    DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
 
-  lines          PickListLine[]
+  lines PickListLine[]
 
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([assignedToId])
 }
 
 model PickListLine {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   pickListId   String
-  pickList     PickList @relation(fields: [pickListId], references: [id], onDelete: Cascade)
+  pickList     PickList  @relation(fields: [pickListId], references: [id], onDelete: Cascade)
   itemId       String
-  item         Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item         Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   requestedQty Int
-  pickedQty    Int      @default(0)
+  pickedQty    Int       @default(0)
   notes        String?
   pickedAt     DateTime?
 
@@ -396,29 +403,29 @@ enum EventStatus {
 }
 
 model Event {
-  id             String         @id @default(cuid())
+  id             String      @id @default(cuid())
   name           String
   description    String?
   startsAt       DateTime?
   endsAt         DateTime?
-  location       String?         // free text venue
-  status         EventStatus    @default(PLANNED)
+  location       String? // free text venue
+  status         EventStatus @default(PLANNED)
   // Gear categories shown as columns on the sheet. Stored as JSON array.
   // Default for new events: ["Shirt","Radio","Cart","Bag"].
-  gearCategories Json            @default("[\"Shirt\",\"Radio\",\"Cart\",\"Bag\"]")
+  gearCategories Json        @default("[\"Shirt\",\"Radio\",\"Cart\",\"Bag\"]")
   notes          String?
 
   // Optional: where this event was spawned from. Lets us link recurring events.
-  templateId     String?
-  template       EventTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateId String?
+  template   EventTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
-  shifts             EventShift[]
-  signOuts           EventSignOut[]
-  alertSubscribers   AlertSubscriber[]
-  alerts             Alert[]
+  shifts           EventShift[]
+  signOuts         EventSignOut[]
+  alertSubscribers AlertSubscriber[]
+  alerts           Alert[]
 
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([startsAt])
@@ -427,13 +434,13 @@ model Event {
 // A shift inside an event (Morning 9-12, Midday 12-3, etc.). Optional —
 // events without shifts behave as one big window.
 model EventShift {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   eventId   String
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  name      String   // "Morning", "Game day", "Setup", etc.
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name      String // "Morning", "Game day", "Setup", etc.
   startsAt  DateTime?
   endsAt    DateTime?
-  sortOrder Int      @default(0)
+  sortOrder Int       @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -444,27 +451,27 @@ model EventShift {
 // One row per person at one event. Each person appears once even if they work
 // multiple shifts; the shifts they're on are stored as a JSON array of shift names.
 model EventSignOut {
-  id          String              @id @default(cuid())
-  eventId     String
-  event       Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
-  personName  String              // free text — works for volunteers without accounts
-  role        String?             // "VOLUNTEER" | "STAFF" — free-text but enforced in UI
+  personName  String // free text — works for volunteers without accounts
+  role        String? // "VOLUNTEER" | "STAFF" — free-text but enforced in UI
   // Optional link to a User account (only set if the person has one)
   userId      String?
-  user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   // Optional link to the Volunteer record (preferred path; personName is fallback)
   volunteerId String?
-  volunteer   Volunteer?          @relation(fields: [volunteerId], references: [id], onDelete: SetNull)
+  volunteer   Volunteer? @relation(fields: [volunteerId], references: [id], onDelete: SetNull)
   notes       String?
   // Array of shift names this person is working. ["Morning","Evening"] etc.
   // Empty array = no shift assigned (works for events without shifts).
-  shifts      Json                @default("[]")
+  shifts      Json       @default("[]")
 
-  items       EventSignOutItem[]
+  items EventSignOutItem[]
 
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([eventId])
   @@index([userId])
@@ -500,49 +507,49 @@ enum CredLevel {
 }
 
 model Volunteer {
-  id                     String         @id @default(cuid())
-  type                   VolunteerType  @default(MEDICAL)
-  firstName              String
-  lastName               String
-  email                  String         @unique
-  phone                  String?        // E.164 (+14145551234)
-  state                  String?        // 2-letter abbreviation
-  dob                    DateTime?      // PHI — guard read access
-  shirtSize              String?        // XS/S/M/L/XL/XXL/XXXL
+  id        String        @id @default(cuid())
+  type      VolunteerType @default(MEDICAL)
+  firstName String
+  lastName  String
+  email     String        @unique
+  phone     String? // E.164 (+14145551234)
+  state     String? // 2-letter abbreviation
+  dob       DateTime? // PHI — guard read access
+  shirtSize String? // XS/S/M/L/XL/XXL/XXXL
 
   // Credentials (Brian verifies — left blank in import)
-  credLevel              CredLevel?     // license/cert level
-  credNumber             String?        // license/cert number (Brian fills in)
-  credExpiresAt          DateTime?      // expiration (Brian fills in)
-  credVerified           Boolean        @default(false)
-  credVerifiedById       String?
-  credVerifiedBy         User?          @relation("VolunteerCredVerifier", fields: [credVerifiedById], references: [id], onDelete: SetNull)
-  credVerifiedAt         DateTime?
+  credLevel        CredLevel? // license/cert level
+  credNumber       String? // license/cert number (Brian fills in)
+  credExpiresAt    DateTime? // expiration (Brian fills in)
+  credVerified     Boolean    @default(false)
+  credVerifiedById String?
+  credVerifiedBy   User?      @relation("VolunteerCredVerifier", fields: [credVerifiedById], references: [id], onDelete: SetNull)
+  credVerifiedAt   DateTime?
 
   // Acknowledgments (signed/sent/reviewed flags)
-  cartWaiverSigned       Boolean        @default(false)
-  cartWaiverSignedAt     DateTime?
-  emailListOptIn         Boolean        @default(false)
-  welcomeEmailSent       Boolean        @default(false)
-  welcomeEmailSentAt     DateTime?
+  cartWaiverSigned   Boolean   @default(false)
+  cartWaiverSignedAt DateTime?
+  emailListOptIn     Boolean   @default(false)
+  welcomeEmailSent   Boolean   @default(false)
+  welcomeEmailSentAt DateTime?
 
   // Event context (informational, from RegPack)
-  camping                Boolean        @default(false)
-  shiftCount             Int?           // shifts committed to in RegPack
-  returning              Boolean        @default(false) // false = new
-  idPictureUrl           String?        // URL to ID photo
+  camping      Boolean @default(false)
+  shiftCount   Int? // shifts committed to in RegPack
+  returning    Boolean @default(false) // false = new
+  idPictureUrl String? // URL to ID photo
 
   // Emergency contact
-  emergencyContactName   String?
-  emergencyContactPhone  String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
 
-  notes                  String?
+  notes String?
 
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  signOuts               EventSignOut[]
-  alertSubscriptions     AlertSubscriber[]
+  signOuts           EventSignOut[]
+  alertSubscriptions AlertSubscriber[]
 
   @@index([lastName, firstName])
   @@index([type])
@@ -582,8 +589,8 @@ model AlertSubscriber {
   eventId     String
   event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   name        String
-  phone       String       // E.164
-  department  String?      // free-text: Parking, Mainstage, Info Booth, etc.
+  phone       String // E.164
+  department  String? // free-text: Parking, Mainstage, Info Booth, etc.
   topics      AlertTopic[] @default([])
   source      AlertSource  @default(QR)
   consentAt   DateTime     @default(now())
@@ -597,7 +604,7 @@ model AlertSubscriber {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  sends       AlertSend[]
+  sends AlertSend[]
 
   @@unique([eventId, phone])
   @@index([eventId])
@@ -605,36 +612,36 @@ model AlertSubscriber {
 }
 
 model Alert {
-  id           String      @id @default(cuid())
-  eventId      String
-  event        Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  topic        AlertTopic
-  body         String
+  id             String     @id @default(cuid())
+  eventId        String
+  event          Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  topic          AlertTopic
+  body           String
   // Who sent it. Either an internal user…
-  sentById     String?
-  sentBy       User?       @relation(fields: [sentById], references: [id], onDelete: SetNull)
+  sentById       String?
+  sentBy         User?      @relation(fields: [sentById], references: [id], onDelete: SetNull)
   // …or an external system (Ops Hub) with a free-text label like "ops-hub:dispatcher Jane Doe".
-  sentByLabel  String?
-  recipientCount Int       @default(0)
-  createdAt    DateTime    @default(now())
+  sentByLabel    String?
+  recipientCount Int        @default(0)
+  createdAt      DateTime   @default(now())
 
-  sends        AlertSend[]
+  sends AlertSend[]
 
   @@index([eventId])
   @@index([createdAt])
 }
 
 model AlertSend {
-  id            String          @id @default(cuid())
-  alertId       String
-  alert         Alert           @relation(fields: [alertId], references: [id], onDelete: Cascade)
-  subscriberId  String
-  subscriber    AlertSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
-  phone         String
-  status        AlertSendStatus @default(QUEUED)
-  twilioSid     String?
-  error         String?
-  createdAt     DateTime        @default(now())
+  id           String          @id @default(cuid())
+  alertId      String
+  alert        Alert           @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  subscriberId String
+  subscriber   AlertSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  phone        String
+  status       AlertSendStatus @default(QUEUED)
+  twilioSid    String?
+  error        String?
+  createdAt    DateTime        @default(now())
 
   @@index([alertId])
   @@index([subscriberId])
@@ -644,24 +651,24 @@ model AlertSend {
 // Multiple rows per (signOutId, category) supported — that's how we track
 // "cart key was Sarah's morning, then Joe's midday".
 model EventSignOutItem {
-  id           String       @id @default(cuid())
-  signOutId    String
-  signOut      EventSignOut @relation(fields: [signOutId], references: [id], onDelete: Cascade)
-  category     String       // must match one of the parent event's gearCategories
+  id          String       @id @default(cuid())
+  signOutId   String
+  signOut     EventSignOut @relation(fields: [signOutId], references: [id], onDelete: Cascade)
+  category    String // must match one of the parent event's gearCategories
   // Optional shift label that this cycle happened during (e.g. "Morning").
   // Auto-set from the active filter tab when OUT is tapped.
-  shift        String?
-  identifier   String?      // e.g. "Radio #3" for this cycle
-  outAt        DateTime?
-  inAt         DateTime?
-  outInitials  String?      // initials captured at sign-out
-  inInitials   String?      // initials captured at sign-in
-  outPhotoUrl  String?      // condition photo at sign-out
-  inPhotoUrl   String?      // condition photo at sign-in
-  notes        String?
+  shift       String?
+  identifier  String? // e.g. "Radio #3" for this cycle
+  outAt       DateTime?
+  inAt        DateTime?
+  outInitials String? // initials captured at sign-out
+  inInitials  String? // initials captured at sign-in
+  outPhotoUrl String? // condition photo at sign-out
+  inPhotoUrl  String? // condition photo at sign-in
+  notes       String?
 
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @default(now()) @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([signOutId])
   @@index([signOutId, category])
@@ -670,31 +677,31 @@ model EventSignOutItem {
 // Reusable event definition. "Saturday at Lambeau" — define gear + shifts once,
 // spawn a new dated Event each week.
 model EventTemplate {
-  id             String                @id @default(cuid())
-  name           String                @unique
+  id             String  @id @default(cuid())
+  name           String  @unique
   description    String?
   location       String?
-  gearCategories Json                  @default("[\"Shirt\",\"Radio\",\"Cart\",\"Bag\"]")
+  gearCategories Json    @default("[\"Shirt\",\"Radio\",\"Cart\",\"Bag\"]")
   notes          String?
 
-  shifts         EventTemplateShift[]
-  spawned        Event[]
+  shifts  EventTemplateShift[]
+  spawned Event[]
 
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model EventTemplateShift {
-  id         String        @id @default(cuid())
-  templateId String
-  template   EventTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  name       String
+  id           String        @id @default(cuid())
+  templateId   String
+  template     EventTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name         String
   // Time of day for this shift, stored as "HH:MM" strings (24-hour).
   // On spawn, the user picks a calendar date and these times become the concrete
   // shift datetimes for that date.
   startsAtTime String?
   endsAtTime   String?
-  sortOrder    Int        @default(0)
+  sortOrder    Int           @default(0)
 
   @@index([templateId])
 }
@@ -705,7 +712,7 @@ model Checkout {
   id               String    @id @default(cuid())
   itemId           String
   item             Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  userId           String    // borrower (the medic)
+  userId           String // borrower (the medic)
   user             User      @relation(fields: [userId], references: [id], onDelete: Restrict)
   quantity         Int       @default(1)
   checkedOutAt     DateTime  @default(now())
@@ -713,8 +720,8 @@ model Checkout {
   returnedAt       DateTime?
   notes            String?
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([itemId])
   @@index([userId, returnedAt])
@@ -766,7 +773,7 @@ model ActivityLog {
   entityId   String
   before     Json?
   after      Json?
-  metadata   Json?          // free-form (e.g., scanned barcode, device id)
+  metadata   Json? // free-form (e.g., scanned barcode, device id)
   createdAt  DateTime       @default(now())
 
   @@index([entityType, entityId])
@@ -788,7 +795,7 @@ model Notification {
   type      NotificationType
   title     String
   body      String?
-  payload   Json?            // related entity ids
+  payload   Json? // related entity ids
   read      Boolean          @default(false)
   createdAt DateTime         @default(now())
 

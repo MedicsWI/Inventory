@@ -40,6 +40,7 @@ function NewItemInner() {
         notes: "",
         photoUrl: null,
         returnable: false,
+        tileDeviceId: "",
         tagIds: [],
       }
     : undefined;

@@ -32,6 +32,7 @@ export type ItemFormValue = {
   notes: string;
   photoUrl: string | null;
   returnable: boolean;
+  tileDeviceId: string;
   tagIds: string[];
 };
 
@@ -50,6 +51,7 @@ const empty: ItemFormValue = {
   notes: "",
   photoUrl: null,
   returnable: false,
+  tileDeviceId: "",
   tagIds: [],
 };
 
@@ -86,6 +88,7 @@ export function ItemForm({ initial, mode }: { initial?: ItemFormValue; mode: "cr
         notes: form.notes || null,
         photoUrl: form.photoUrl,
         returnable: form.returnable,
+        tileDeviceId: form.tileDeviceId.trim() || null,
         tagIds: form.tagIds,
       };
       return mode === "create"
@@ -202,6 +205,20 @@ export function ItemForm({ initial, mode }: { initial?: ItemFormValue; mode: "cr
             <Input type="date" value={form.expirationDate}
               onChange={(e) => setForm({ ...form, expirationDate: e.target.value })} />
           </Field>
+          <div className="sm:col-span-2">
+            <Field label="Tile tracker ID">
+              <Input
+                value={form.tileDeviceId}
+                onChange={(e) => setForm({ ...form, tileDeviceId: e.target.value })}
+                placeholder="Tile device ID from the ops hub Tile Trackers registry"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Links this asset (AED, med cart, equipment) to its Bluetooth tracker. Copy the
+                device ID from the ops hub <span className="font-medium">Tile Trackers</span> page.
+                One tracker per item.
+              </p>
+            </Field>
+          </div>
           <div className="sm:col-span-2">
             <label className="flex items-start gap-3 cursor-pointer">
               <input

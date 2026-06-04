@@ -21,6 +21,7 @@ const updateSchema = z.object({
   locationId: z.string().cuid().nullable().optional(),
   categoryId: z.string().cuid().nullable().optional(),
   returnable: z.boolean().optional(),
+  tileDeviceId: z.string().nullable().optional(),
   tagIds: z.array(z.string().cuid()).optional(),
 });
 
