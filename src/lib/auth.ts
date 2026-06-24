@@ -66,14 +66,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
-    // On every JWT mint, ensure id + role are present. Role comes from DB so promotions
-    // take effect on the user's next sign-in (or session refresh).
+    // On every JWT mint, stamp id (first sign-in only) then always re-fetch role
+    // from DB so that role changes take effect on the next token refresh without
+    // requiring the user to sign out.
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as { role?: Role }).role ?? "MEDIC";
       }
-      if (token.id && !token.role) {
+      if (token.id) {
         const db = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: { role: true },
