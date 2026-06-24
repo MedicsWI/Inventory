@@ -31,6 +31,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       server: { host: "localhost", port: 1, auth: { user: "noop", pass: "noop" } },
       from: process.env.GRAPH_SEND_FROM,
       async sendVerificationRequest({ identifier, url, expires }) {
+        // Only send magic links to pre-existing users (invite-only).
+        const existing = await prisma.user.findUnique({
+          where: { email: identifier },
+          select: { id: true },
+        });
+        if (!existing) return; // silently drop — don't reveal whether the address is registered
         const host = new URL(url).host;
         const expiresAt = expires
           ? new Date(expires).toLocaleString("en-US", { timeZone: "America/Chicago" })
@@ -66,6 +72,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
+    // Magic-link sign-in: only allow pre-existing users (invite-only).
+    // Entra SSO is single-tenant so all @medicswisconsin.com accounts are fine.
+    async signIn({ account, user }) {
+      if (account?.provider === "email") {
+        const existing = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+          select: { id: true },
+        });
+        return !!existing;
+      }
+      return true;
+    },
     // On every JWT mint, stamp id (first sign-in only) then always re-fetch role
     // from DB so that role changes take effect on the next token refresh without
     // requiring the user to sign out.
