@@ -99,6 +99,7 @@ export function BarcodeScanner({
           });
           scannerRef.current = scanner;
 
+          const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
           await scanner.start(
             { facingMode: "environment" },
             {
@@ -114,10 +115,17 @@ export function BarcodeScanner({
               aspectRatio: 1.7777,
               videoConstraints: {
                 facingMode: { ideal: "environment" },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-                // @ts-expect-error — focusMode is non-standard but widely accepted
-                advanced: [{ focusMode: "continuous" }],
+                // Mobile cameras autofocus natively — high-res constraints and
+                // the non-standard focusMode advanced hint cause iOS Safari to
+                // reject getUserMedia entirely. Keep constraints minimal on mobile.
+                ...(isMobile
+                  ? {}
+                  : {
+                      width: { ideal: 1920 },
+                      height: { ideal: 1080 },
+                      // @ts-expect-error — focusMode is non-standard but works on most desktop browsers
+                      advanced: [{ focusMode: "continuous" }],
+                    }),
               },
             },
             (decoded, decodedResult) => {
