@@ -148,7 +148,7 @@ export default function ScanPage() {
     if (hit?.name) params.set("name", hit.name);
     if (hit?.description) params.set("description", hit.description);
     if (hit?.brand) params.set("brand", hit.brand);
-    if (hit?.manufacturer) params.set("brand", hit.manufacturer);
+    if (hit?.manufacturer) params.set("manufacturer", hit.manufacturer);
     return `/items/new?${params.toString()}`;
   }
 

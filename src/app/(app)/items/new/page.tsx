@@ -17,9 +17,9 @@ function NewItemInner() {
   const presetBarcode = sp.get("barcode") ?? "";
   const presetName = sp.get("name") ?? "";
   const presetDescription = sp.get("description") ?? "";
-  const presetBrand = sp.get("brand") ?? "";
+  const presetBrand = sp.get("brand") ?? sp.get("manufacturer") ?? "";
 
-  // Compose description from brand + description if both came in from the UPC lookup.
+  // Compose description from brand + description if both came in from the UPC/NDC lookup.
   const description = [presetBrand, presetDescription].filter(Boolean).join(" — ");
 
   const hasPreset = presetBarcode || presetName || description;
