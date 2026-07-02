@@ -40,6 +40,7 @@ export function BarcodeScanner({
   const containerId = `scanner-${elId}`;
   const scannerRef = React.useRef<Html5Qrcode | null>(null);
   const startedRef = React.useRef(false);
+  const capturedRef = React.useRef(false); // sync guard — html5-qrcode keeps decoding per-frame
   const [error, setError] = React.useState<string | null>(null);
   const [native, setNative] = React.useState(false);
   const [lastSeen, setLastSeen] = React.useState<string | null>(null);
@@ -112,7 +113,9 @@ export function BarcodeScanner({
                 const size = Math.max(220, Math.min(380, Math.floor(min * 0.62)));
                 return { width: size, height: size };
               },
-              aspectRatio: 1.7777,
+              // aspectRatio becomes a getUserMedia constraint under the hood and
+              // is flaky on iOS Safari — apply it on desktop only.
+              ...(isMobile ? {} : { aspectRatio: 1.7777 }),
               videoConstraints: {
                 facingMode: { ideal: "environment" },
                 // Mobile cameras autofocus natively — high-res constraints and
@@ -129,6 +132,11 @@ export function BarcodeScanner({
               },
             },
             (decoded, decodedResult) => {
+              // Guard: the library keeps firing per-frame during the 400ms
+              // "got it" flash — without this one scan triggers onScan 3–5x
+              // (duplicate navigations and lookups).
+              if (capturedRef.current) return;
+              capturedRef.current = true;
               // Capture + show a green "got it" flash before navigating away.
               setLastSeen(decoded);
               setCaptured(true);
@@ -206,6 +214,7 @@ export function BarcodeScanner({
   }
 
   function refresh() {
+    capturedRef.current = false;
     setCaptured(false);
     setSlowScan(false);
     setLastSeen(null);

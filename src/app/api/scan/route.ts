@@ -17,9 +17,23 @@ export async function POST(req: Request) {
 
   const code = parsed.data.code.trim();
 
+  // Scanners are inconsistent about UPC-A vs EAN-13: the same label can come
+  // back as 12 digits or as 13 with a leading 0 (and GS1/ITF-14 wraps add two
+  // zeros). Match the stored barcode under any of those spellings so an item
+  // that exists never reads as "unknown".
+  const variants = new Set([code]);
+  if (/^\d+$/.test(code)) {
+    const stripped = code.replace(/^0+/, "");
+    if (stripped.length >= 8) variants.add(stripped);
+    if (code.length === 12) variants.add(`0${code}`);
+    if (code.length === 13 && code.startsWith("0")) variants.add(code.slice(1));
+    if (code.length === 14 && code.startsWith("00")) variants.add(code.slice(2));
+  }
+  const codes = [...variants];
+
   // Try item first, then location
   const item = await prisma.item.findFirst({
-    where: { OR: [{ barcode: code }, { sku: code }] },
+    where: { OR: [{ barcode: { in: codes } }, { sku: { in: codes } }] },
     include: { location: true, category: true },
   });
 
@@ -34,7 +48,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ type: "item", entity: item });
   }
 
-  const loc = await prisma.location.findFirst({ where: { barcode: code } });
+  const loc = await prisma.location.findFirst({ where: { barcode: { in: codes } } });
   if (loc) {
     await logActivity({
       userId: session.user.id,
