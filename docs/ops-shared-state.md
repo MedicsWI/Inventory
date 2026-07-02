@@ -56,7 +56,7 @@ Safe pattern: write a raw SQL `alter table` script and run it in the Supabase SQ
 - [x] Inventory app bulk-link page built: `/admin/tile-links` — lists all returnable items with inline `tile_device_id` field (unique-violation toast on duplicate paste). `/api/items?returnable=1` filter added.
 
 ### Still to do
-- [ ] Register all 27 Tile devices at `/admin/tile-devices` in the ops hub
+- [x] Register all 27 Tile devices at `/admin/tile-devices` in the ops hub (done 07/01/2026)
 - [ ] Paste each device ID into inventory `/admin/tile-links` (AED-1..6, XSERIES-1..4, etc.)
 - [ ] Set `inventory_item_id` on the matching ops hub `tile_devices` row so the live map click-through works
 
