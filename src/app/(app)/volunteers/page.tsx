@@ -295,14 +295,9 @@ export default function VolunteersPage() {
           <CardContent>
             <div className="text-2xl font-bold">{counts.unverified}</div>
             {counts.unverified > 0 && (
-              <div className="flex gap-3">
-                <Button asChild variant="link" size="sm" className="px-0 h-auto text-xs">
-                  <Link href="/volunteers/verify">Open verify queue →</Link>
-                </Button>
-                <Button variant="link" size="sm" className="px-0 h-auto text-xs" onClick={() => setFilter("UNVERIFIED")}>
-                  Filter list
-                </Button>
-              </div>
+              <Button variant="link" size="sm" className="px-0 h-auto text-xs" onClick={() => setFilter("UNVERIFIED")}>
+                Show only unverified →
+              </Button>
             )}
           </CardContent>
         </Card>

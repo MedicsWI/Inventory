@@ -84,19 +84,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return true;
     },
-    // On every JWT mint, stamp id (first sign-in only) then always re-fetch role
-    // from DB so that role changes take effect on the next token refresh without
-    // requiring the user to sign out.
+    // Stamp id on first sign-in, then re-fetch role from DB at most every
+    // ROLE_REFRESH_MS so role changes take effect within a few minutes without
+    // sign-out — but without a DB hit on every request. A deleted user
+    // invalidates the token (returns null → signed out).
     async jwt({ token, user }) {
+      const ROLE_REFRESH_MS = 5 * 60 * 1000;
       if (user) {
         token.id = user.id;
+        token.roleCheckedAt = 0; // force a fresh role fetch on first mint
       }
-      if (token.id) {
+      const checkedAt = typeof token.roleCheckedAt === "number" ? token.roleCheckedAt : 0;
+      if (token.id && (!token.role || Date.now() - checkedAt > ROLE_REFRESH_MS)) {
         const db = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: { role: true },
         });
-        if (db) token.role = db.role;
+        if (!db) return null; // user row deleted — kill the session
+        token.role = db.role;
+        token.roleCheckedAt = Date.now();
       }
       return token;
     },

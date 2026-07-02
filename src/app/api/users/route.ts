@@ -1,7 +1,7 @@
 // /api/users — list + create (admin/manager only; user:manage permission required)
+// Passwords removed 07/01/2026 — new users sign in via Entra SSO or magic link.
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertCan } from "@/lib/permissions";
@@ -11,7 +11,6 @@ const createSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
   role: z.enum(["ADMIN", "MANAGER", "MEDIC"]).default("MEDIC"),
-  password: z.string().min(8).max(200),
 });
 
 export async function GET() {
@@ -41,13 +40,11 @@ export async function POST(req: Request) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return NextResponse.json({ error: "Email already in use" }, { status: 409 });
 
-  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
   const created = await prisma.user.create({
     data: {
       email,
       name: parsed.data.name,
       role: parsed.data.role,
-      passwordHash,
     },
     select: { id: true, name: true, email: true, role: true, createdAt: true },
   });

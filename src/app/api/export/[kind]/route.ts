@@ -4,14 +4,23 @@ import { NextResponse } from "next/server";
 import Papa from "papaparse";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { assertCan } from "@/lib/permissions";
 
 type Ctx = { params: Promise<{ kind: string }> };
+
+// Exports containing other users' data (all borrowers, full audit log) are
+// manager/admin only — mirrors the MEDIC own-rows scoping on /api/checkouts.
+const RESTRICTED_KINDS = new Set(["checkouts", "activity"]);
 
 export async function GET(req: Request, ctx: Ctx) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { kind } = await ctx.params;
+  if (RESTRICTED_KINDS.has(kind)) {
+    try { assertCan(session.user.role, "import:bulk"); }
+    catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  }
   const { searchParams } = new URL(req.url);
 
   let rows: Record<string, unknown>[] = [];

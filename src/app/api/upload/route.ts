@@ -6,6 +6,13 @@ import { getStorageClient, STORAGE_BUCKET } from "@/lib/storage";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const ALLOWED_FOLDERS = new Set(["items", "locations"]);
+const EXT_BY_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -19,7 +26,9 @@ export async function POST(req: Request) {
   }
 
   const file = form.get("file");
-  const folder = (form.get("folder") as string | null) ?? "items";
+  // Allowlist the folder — never build storage keys from raw client input.
+  const folderRaw = (form.get("folder") as string | null) ?? "items";
+  const folder = ALLOWED_FOLDERS.has(folderRaw) ? folderRaw : "items";
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Missing file" }, { status: 400 });
@@ -31,7 +40,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Unsupported type ${file.type}` }, { status: 415 });
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+  // Extension from the validated MIME type, not the client filename.
+  const ext = EXT_BY_TYPE[file.type] ?? "bin";
   const path = `${folder}/${randomUUID()}.${ext}`;
 
   try {

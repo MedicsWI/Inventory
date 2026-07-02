@@ -42,41 +42,55 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  // Apply transactionally: increment line.receivedQty + item.quantity (if linked)
-  await prisma.$transaction(async (tx) => {
-    await tx.incomingOrderLine.update({
-      where: { id: line.id },
-      data: { receivedQty: line.receivedQty + parsed.data.receivedDelta },
-    });
-    if (line.itemId) {
-      await tx.item.update({
-        where: { id: line.itemId },
-        data: { quantity: { increment: parsed.data.receivedDelta } },
+  // Apply transactionally: increment line.receivedQty + item.quantity (if linked),
+  // then recompute order status from fresh line states — all in one tx.
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Atomic guard: increment only if the delta still fits — prevents two
+      // concurrent receives from over-receiving and double-incrementing stock.
+      const upd = await tx.incomingOrderLine.updateMany({
+        where: {
+          id: line.id,
+          receivedQty: { lte: line.expectedQty - parsed.data.receivedDelta },
+        },
+        data: { receivedQty: { increment: parsed.data.receivedDelta } },
       });
-    }
-  });
+      if (upd.count === 0) {
+        throw new Error("Line was received by someone else — refresh and try again.");
+      }
+      if (line.itemId) {
+        await tx.item.update({
+          where: { id: line.itemId },
+          data: { quantity: { increment: parsed.data.receivedDelta } },
+        });
+      }
 
-  // Recompute overall order status from line states
-  const refreshed = await prisma.incomingOrder.findUnique({
-    where: { id },
-    include: { lines: true },
-  });
-  if (refreshed) {
-    const totalExpected = refreshed.lines.reduce((s, l) => s + l.expectedQty, 0);
-    const totalReceived = refreshed.lines.reduce((s, l) => s + l.receivedQty, 0);
-    const newStatus =
-      totalReceived === 0
-        ? refreshed.status === "CANCELED" ? "CANCELED" : refreshed.status === "SHIPPED" ? "SHIPPED" : "ORDERED"
-        : totalReceived >= totalExpected
-          ? "RECEIVED"
-          : "PARTIAL";
-    await prisma.incomingOrder.update({
-      where: { id },
-      data: {
-        status: newStatus,
-        receivedAt: newStatus === "RECEIVED" ? new Date() : null,
-      },
+      // Recompute overall order status from line states (inside the tx)
+      const lines = await tx.incomingOrderLine.findMany({
+        where: { incomingOrderId: id },
+        select: { expectedQty: true, receivedQty: true },
+      });
+      const totalExpected = lines.reduce((s, l) => s + l.expectedQty, 0);
+      const totalReceived = lines.reduce((s, l) => s + l.receivedQty, 0);
+      const newStatus =
+        totalReceived === 0
+          ? order.status === "CANCELED" ? "CANCELED" : order.status === "SHIPPED" ? "SHIPPED" : "ORDERED"
+          : totalReceived >= totalExpected
+            ? "RECEIVED"
+            : "PARTIAL";
+      await tx.incomingOrder.update({
+        where: { id },
+        data: {
+          status: newStatus,
+          receivedAt: newStatus === "RECEIVED" ? new Date() : null,
+        },
+      });
     });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Receive failed" },
+      { status: 409 },
+    );
   }
 
   await logActivity({

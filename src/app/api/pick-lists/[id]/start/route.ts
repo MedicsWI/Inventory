@@ -14,6 +14,10 @@ export async function POST(_req: Request, ctx: Ctx) {
   if (!pl) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (pl.status !== "DRAFT") return NextResponse.json({ error: `Status is ${pl.status}` }, { status: 400 });
   if (pl.lines.length === 0) return NextResponse.json({ error: "No lines on this list." }, { status: 400 });
+  // Medics can only start lists assigned to them (mirrors the complete route).
+  if (session.user.role === "MEDIC" && pl.assignedToId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const updated = await prisma.pickList.update({
     where: { id },

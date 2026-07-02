@@ -23,29 +23,56 @@ export async function POST(_req: Request, ctx: Ctx) {
   }
 
   const linesToDecrement = pl.lines.filter((l) => l.pickedQty > 0);
+  const shortages: { itemId: string; name: string; picked: number; decremented: number }[] = [];
 
-  await prisma.$transaction(async (tx) => {
-    for (const line of linesToDecrement) {
-      // Bound by current quantity to prevent negative stock
-      const item = await tx.item.findUnique({ where: { id: line.itemId }, select: { quantity: true } });
-      if (!item) continue;
-      const decrement = Math.min(line.pickedQty, item.quantity);
-      if (decrement > 0) {
-        await tx.item.update({
-          where: { id: line.itemId },
-          data: { quantity: { decrement } },
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Claim the list first — a concurrent complete finds it already COMPLETED
+      // and aborts instead of double-decrementing stock.
+      const claim = await tx.pickList.updateMany({
+        where: { id, status: "IN_PROGRESS" },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          completedById: session.user.id,
+        },
+      });
+      if (claim.count === 0) throw new Error("Pick list is no longer in progress.");
+
+      for (const line of linesToDecrement) {
+        // Atomic guard: full decrement only if stock covers it.
+        const dec = await tx.item.updateMany({
+          where: { id: line.itemId, quantity: { gte: line.pickedQty } },
+          data: { quantity: { decrement: line.pickedQty } },
         });
+        if (dec.count === 0) {
+          // Short — take what's there and report it instead of hiding it.
+          const item = await tx.item.findUnique({
+            where: { id: line.itemId },
+            select: { quantity: true, name: true },
+          });
+          if (!item) continue;
+          if (item.quantity > 0) {
+            await tx.item.update({
+              where: { id: line.itemId },
+              data: { quantity: { decrement: item.quantity } },
+            });
+          }
+          shortages.push({
+            itemId: line.itemId,
+            name: item.name,
+            picked: line.pickedQty,
+            decremented: item.quantity,
+          });
+        }
       }
-    }
-    await tx.pickList.update({
-      where: { id },
-      data: {
-        status: "COMPLETED",
-        completedAt: new Date(),
-        completedById: session.user.id,
-      },
     });
-  });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Complete failed" },
+      { status: 409 },
+    );
+  }
 
   await logActivity({
     userId: session.user.id,
@@ -56,8 +83,9 @@ export async function POST(_req: Request, ctx: Ctx) {
       lines: pl.lines.length,
       picked: linesToDecrement.length,
       units: linesToDecrement.reduce((s, l) => s + l.pickedQty, 0),
+      shortages: shortages.length ? shortages : undefined,
     },
   });
 
-  return NextResponse.json({ ok: true, lines: linesToDecrement.length });
+  return NextResponse.json({ ok: true, lines: linesToDecrement.length, shortages });
 }

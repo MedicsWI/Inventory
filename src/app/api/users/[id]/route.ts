@@ -1,7 +1,8 @@
-// /api/users/[id] — get, update (role, name, password reset), delete
+// /api/users/[id] — get, update (role, name, email), delete
+// Passwords removed 07/01/2026 — sign-in is Entra SSO or magic link only.
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertCan } from "@/lib/permissions";
@@ -11,7 +12,6 @@ const updateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   email: z.string().email().max(200).optional(),
   role: z.enum(["ADMIN", "MANAGER", "MEDIC"]).optional(),
-  password: z.string().min(8).max(200).optional(), // admin-set reset
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -64,7 +64,6 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const data: Record<string, unknown> = {};
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.role !== undefined) data.role = parsed.data.role;
-  if (parsed.data.password) data.passwordHash = await bcrypt.hash(parsed.data.password, 12);
 
   // Email change — case-insensitive uniqueness check with friendly error
   if (parsed.data.email !== undefined) {
@@ -90,7 +89,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     entityType: "USER",
     entityId: id,
     before: { ...before },
-    after: { ...updated, passwordReset: !!parsed.data.password },
+    after: { ...updated },
   });
 
   return NextResponse.json(updated);
@@ -112,7 +111,18 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   });
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await prisma.user.delete({ where: { id } });
+  try {
+    await prisma.user.delete({ where: { id } });
+  } catch (e) {
+    // Checkout.user is onDelete: Restrict — surface a friendly 409 instead of a raw P2003.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      return NextResponse.json(
+        { error: "This user has checkout history and can't be deleted. Change their role instead." },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
   await logActivity({
     userId: session.user.id,
     action: "DELETE",

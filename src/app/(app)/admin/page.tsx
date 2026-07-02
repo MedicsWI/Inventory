@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { Plus, Trash2, KeyRound, Upload, PackageOpen, Download, MessageSquare, MapPin, Pencil, Check, X } from "lucide-react";
+import { Plus, Trash2, Upload, PackageOpen, Download, MessageSquare, MapPin, Pencil, Check, X } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
@@ -13,18 +13,17 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
-import { useConfirm, usePrompt } from "@/components/dialog-provider";
+import { useConfirm } from "@/components/dialog-provider";
 
 type Role = "ADMIN" | "MANAGER" | "MEDIC";
 type Row = { id: string; name: string | null; email: string; role: Role; createdAt: string };
-type Patch = { role?: Role; password?: string; name?: string; email?: string };
+type Patch = { role?: Role; name?: string; email?: string };
 
 export default function AdminPage() {
   const qc = useQueryClient();
   const { data: session } = useSession();
   const meId = session?.user.id;
   const confirm = useConfirm();
-  const prompt = usePrompt();
 
   const users = useQuery({
     queryKey: ["users"],
@@ -52,22 +51,17 @@ export default function AdminPage() {
 
   // Inline create
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ name: "", email: "", role: "MEDIC" as Role, password: "" });
+  const [draft, setDraft] = useState({ name: "", email: "", role: "MEDIC" as Role });
   const createUser = useMutation({
     mutationFn: () => api.post("/api/users", draft),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });
-      toast.success(`User created. Share the temp password with ${draft.name} now.`);
-      setDraft({ name: "", email: "", role: "MEDIC", password: "" });
+      toast.success(`User created. They can sign in with M365 SSO or a magic link to ${draft.email}.`);
+      setDraft({ name: "", email: "", role: "MEDIC" });
       setCreating(false);
     },
     onError: (e) => toast.error(String(e)),
   });
-
-  function tempPassword() {
-    const out = Math.random().toString(36).slice(2, 6) + "-" + Math.random().toString(36).slice(2, 6);
-    setDraft((d) => ({ ...d, password: out }));
-  }
 
   // Inline edit (one row at a time)
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -139,19 +133,16 @@ export default function AdminPage() {
                 <option value="ADMIN">ADMIN</option>
               </select>
             </div>
-            <div className="space-y-1">
-              <Label>Temp password * (min 8 chars)</Label>
-              <div className="flex gap-2">
-                <Input value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} />
-                <Button type="button" variant="outline" onClick={tempPassword}>Generate</Button>
-              </div>
-              <p className="text-xs text-muted-foreground">Share this with the user. Ask them to change it on first login.</p>
+            <div className="sm:col-span-2">
+              <p className="text-xs text-muted-foreground">
+                No password needed — they sign in with their M365 account or a magic link sent to this email.
+              </p>
             </div>
             <div className="sm:col-span-2 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button>
               <Button
                 onClick={() => createUser.mutate()}
-                disabled={!draft.name || !draft.email || draft.password.length < 8 || createUser.isPending}
+                disabled={!draft.name || !draft.email || createUser.isPending}
               >
                 Create
               </Button>
@@ -258,25 +249,6 @@ export default function AdminPage() {
                               <Pencil className="h-4 w-4" /> Edit
                             </Button>
                             <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={async () => {
-                                const pw = await prompt({
-                                  title: "Reset password",
-                                  description: `Set a new temporary password for ${u.email}. Share it with them and ask them to change it on first login.`,
-                                  label: "New temp password",
-                                  placeholder: "min 8 characters",
-                                  type: "text",
-                                  minLength: 8,
-                                  confirmText: "Reset password",
-                                });
-                                if (!pw) return;
-                                updateUser.mutate({ id: u.id, patch: { password: pw } });
-                              }}
-                            >
-                              <KeyRound className="h-4 w-4" /> Reset pw
-                            </Button>
-                            <Button
                               variant="destructive"
                               size="sm"
                               disabled={u.id === meId}
@@ -357,26 +329,6 @@ export default function AdminPage() {
                       <div className="flex gap-2 flex-wrap">
                         <Button variant="outline" size="sm" onClick={() => startEdit(u)} className="flex-1">
                           <Pencil className="h-4 w-4" /> Edit
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={async () => {
-                            const pw = await prompt({
-                              title: "Reset password",
-                              description: `Set a new temporary password for ${u.email}.`,
-                              label: "New temp password",
-                              placeholder: "min 8 characters",
-                              type: "text",
-                              minLength: 8,
-                              confirmText: "Reset password",
-                            });
-                            if (!pw) return;
-                            updateUser.mutate({ id: u.id, patch: { password: pw } });
-                          }}
-                        >
-                          <KeyRound className="h-4 w-4" /> Reset pw
                         </Button>
                         <Button
                           variant="destructive"

@@ -6,17 +6,29 @@
 //   1. Signed-in admin/manager hitting the "Check now" button (cookie auth)
 //   2. Vercel Cron / external scheduler with Bearer CRON_SECRET header
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendEmailAlert, sendTeamsAlert, sendPushAlert, sendSmsAlert } from "@/lib/notifier";
 
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
 export async function POST(req: Request) {
-  // Auth: either a real session, OR a Bearer token matching CRON_SECRET
+  // Auth: either a signed-in ADMIN/MANAGER, OR a Bearer token matching CRON_SECRET.
+  // The sweep fans out email/Teams/push/SMS, so MEDICs can't trigger it.
   const session = await auth();
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get("authorization") ?? "";
-  const cronAuthorized = !!(cronSecret && authHeader === `Bearer ${cronSecret}`);
-  if (!session && !cronAuthorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const cronAuthorized = !!(cronSecret && safeEqual(authHeader, `Bearer ${cronSecret}`));
+  const sessionAuthorized =
+    !!session && (session.user.role === "ADMIN" || session.user.role === "MANAGER");
+  if (!sessionAuthorized && !cronAuthorized) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const now = new Date();
   const in30 = new Date(now.getTime() + 30 * 86400000);
@@ -51,8 +63,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ created: 0, reason: "No admin/manager recipients" });
   }
 
+  // Lower bound keeps long-expired items (>90d) from re-alerting daily forever.
+  const past90d = new Date(now.getTime() - 90 * 86400000);
   const expiringItems = await prisma.item.findMany({
-    where: { expirationDate: { lte: in30 } },
+    where: { expirationDate: { lte: in30, gte: past90d } },
     select: { id: true, name: true, expirationDate: true, quantity: true },
   });
 

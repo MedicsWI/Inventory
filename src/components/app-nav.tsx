@@ -12,7 +12,6 @@ import {
   Activity,
   Settings,
   LogOut,
-  KeyRound,
   PackageOpen,
   PackageCheck,
   Bell,
@@ -224,11 +223,7 @@ export function AppNav() {
           <ThemeToggle />
         </div>
         {/* /account/alerts moved to Ops Hub on 05/27/2026 (Phase 7 cutover). */}
-        <Button asChild variant="ghost" className="w-full justify-start mb-1">
-          <Link href="/account/password">
-            <KeyRound className="h-4 w-4" /> Change password
-          </Link>
-        </Button>
+        {/* Password change removed 07/01/2026 — sign-in is Entra SSO / magic link only. */}
         <Button
           variant="outline"
           className="w-full"

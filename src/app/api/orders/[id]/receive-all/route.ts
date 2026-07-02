@@ -33,24 +33,36 @@ export async function POST(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Nothing remaining to receive." }, { status: 400 });
   }
 
-  await prisma.$transaction(async (tx) => {
-    for (const { line, delta } of updates) {
-      await tx.incomingOrderLine.update({
-        where: { id: line.id },
-        data: { receivedQty: line.receivedQty + delta },
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Claim the order first — a second concurrent receive-all finds it
+      // already RECEIVED and aborts instead of double-incrementing stock.
+      const claim = await tx.incomingOrder.updateMany({
+        where: { id, status: { notIn: ["CANCELED", "RECEIVED"] } },
+        data: { status: "RECEIVED", receivedAt: new Date() },
       });
-      if (line.itemId) {
-        await tx.item.update({
-          where: { id: line.itemId },
-          data: { quantity: { increment: delta } },
+      if (claim.count === 0) throw new Error("Order was already received or canceled.");
+
+      for (const { line, delta } of updates) {
+        // Optimistic guard per line: skip if someone received it since our read.
+        const upd = await tx.incomingOrderLine.updateMany({
+          where: { id: line.id, receivedQty: line.receivedQty },
+          data: { receivedQty: { increment: delta } },
         });
+        if (upd.count > 0 && line.itemId) {
+          await tx.item.update({
+            where: { id: line.itemId },
+            data: { quantity: { increment: delta } },
+          });
+        }
       }
-    }
-    await tx.incomingOrder.update({
-      where: { id },
-      data: { status: "RECEIVED", receivedAt: new Date() },
     });
-  });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Receive failed" },
+      { status: 409 },
+    );
+  }
 
   await logActivity({
     userId: session.user.id,

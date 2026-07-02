@@ -33,18 +33,21 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   try {
     const updated = await prisma.$transaction(async (tx) => {
-      const c = await tx.checkout.update({
-        where: { id },
+      // Atomic guard: only one caller can flip returnedAt — prevents two
+      // concurrent returns from double-refunding the item quantity.
+      const flip = await tx.checkout.updateMany({
+        where: { id, returnedAt: null },
         data: {
           returnedAt: parsed.data.returnedAt ? new Date(parsed.data.returnedAt) : new Date(),
           notes: parsed.data.notes !== undefined ? parsed.data.notes : before.notes,
         },
       });
+      if (flip.count === 0) throw new Error("Already returned.");
       await tx.item.update({
         where: { id: before.itemId },
         data: { quantity: { increment: before.quantity } },
       });
-      return c;
+      return tx.checkout.findUniqueOrThrow({ where: { id } });
     });
 
     await logActivity({

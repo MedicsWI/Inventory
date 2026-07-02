@@ -59,14 +59,26 @@ export async function POST(req: Request) {
 
   const { itemId, userId, quantity, expectedReturnAt, notes } = parsed.data;
 
+  // Medics can only check gear out to themselves; managers/admins can check out to anyone.
+  if (session.user.role === "MEDIC" && userId !== session.user.id) {
+    return NextResponse.json({ error: "Medics can only check out gear to themselves." }, { status: 403 });
+  }
+
   try {
     const checkout = await prisma.$transaction(async (tx) => {
       const item = await tx.item.findUnique({ where: { id: itemId } });
       if (!item) throw new Error("Item not found");
-      if (item.quantity < quantity) throw new Error(`Only ${item.quantity} available`);
       if (!item.returnable) throw new Error("This item isn't marked as returnable equipment. Use qty adjust instead.");
 
-      const c = await tx.checkout.create({
+      // Atomic guard: decrement only if enough stock remains — prevents two
+      // concurrent checkouts of the last unit driving quantity negative.
+      const dec = await tx.item.updateMany({
+        where: { id: itemId, quantity: { gte: quantity } },
+        data: { quantity: { decrement: quantity } },
+      });
+      if (dec.count === 0) throw new Error(`Only ${item.quantity} available`);
+
+      return tx.checkout.create({
         data: {
           itemId,
           userId,
@@ -75,11 +87,6 @@ export async function POST(req: Request) {
           notes: notes ?? null,
         },
       });
-      await tx.item.update({
-        where: { id: itemId },
-        data: { quantity: { decrement: quantity } },
-      });
-      return c;
     });
 
     await logActivity({

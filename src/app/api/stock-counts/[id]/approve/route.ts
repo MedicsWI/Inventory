@@ -31,24 +31,42 @@ export async function POST(_req: Request, ctx: Ctx) {
 
   const discrepancies = count.lines.filter((l) => l.actualQty != null && l.actualQty !== l.expectedQty);
 
-  await prisma.$transaction(async (tx) => {
-    for (const line of count.lines) {
-      if (line.actualQty == null) continue;
-      if (line.actualQty === line.expectedQty) continue;
-      await tx.item.update({
-        where: { id: line.itemId },
-        data: { quantity: line.actualQty },
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Claim the count first so concurrent approves can't double-apply.
+      const claim = await tx.stockCount.updateMany({
+        where: { id, status: "REVIEW" },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          approvedById: session.user.id,
+        },
       });
-    }
-    await tx.stockCount.update({
-      where: { id },
-      data: {
-        status: "COMPLETED",
-        completedAt: new Date(),
-        approvedById: session.user.id,
-      },
+      if (claim.count === 0) throw new Error("Count is no longer in REVIEW.");
+
+      for (const line of count.lines) {
+        if (line.actualQty == null) continue;
+        if (line.actualQty === line.expectedQty) continue;
+        // Apply the DELTA (actual − expected), not an absolute set — checkouts
+        // and receives that happened between submit and approve are preserved.
+        const delta = line.actualQty - line.expectedQty;
+        const cur = await tx.item.findUnique({
+          where: { id: line.itemId },
+          select: { quantity: true },
+        });
+        if (!cur) continue;
+        await tx.item.update({
+          where: { id: line.itemId },
+          data: { quantity: Math.max(0, cur.quantity + delta) },
+        });
+      }
     });
-  });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Approve failed" },
+      { status: 409 },
+    );
+  }
 
   // Per-item audit entry so item history shows the stock-count source.
   for (const line of discrepancies) {

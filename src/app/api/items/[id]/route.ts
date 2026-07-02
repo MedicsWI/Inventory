@@ -100,6 +100,19 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
   const before = await prisma.item.findUnique({ where: { id } });
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Deleting an item cascades its checkouts — block while gear is still out
+  // so active checkouts can't silently vanish.
+  const activeCheckouts = await prisma.checkout.count({
+    where: { itemId: id, returnedAt: null },
+  });
+  if (activeCheckouts > 0) {
+    return NextResponse.json(
+      { error: `This item has ${activeCheckouts} active checkout(s). Return them before deleting.` },
+      { status: 409 },
+    );
+  }
+
   await prisma.item.delete({ where: { id } });
   await logActivity({
     userId: session.user.id,
