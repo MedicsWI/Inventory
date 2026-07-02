@@ -60,6 +60,25 @@ Safe pattern: write a raw SQL `alter table` script and run it in the Supabase SQ
 - [ ] Paste each device ID into inventory `/admin/tile-links` (AED-1..6, XSERIES-1..4, etc.)
 - [ ] Set `inventory_item_id` on the matching ops hub `tile_devices` row so the live map click-through works
 
+## Handoff → Ops Hub: Volunteer License Verify Queue (added 07/01/2026)
+
+The inventory app's volunteer feature was deleted in Phase 8 before this shipped.
+Build it in the ops hub against its volunteers tables. Spec (from the inventory
+prototype, reviewed by Brian):
+
+- Page: `/volunteers/verify` (or ops hub equivalent) — all volunteers with
+  `cred_verified = false`, searchable by name/email.
+- Columns: name (link to record) + email, type badge (MEDICAL/SECURITY), state,
+  ID-photo link (opens in new tab), then INLINE editable: cred level select
+  (EMR/EMT/AEMT/PARAMEDIC/RN/LPN/MD/DO/PA/NP/SECURITY/POLICE/FIRE/CHAPLAIN/OTHER),
+  license # input, expiration date input.
+- Row actions: **Verify** (saves fields + sets verified, stamps verifier user id +
+  timestamp, row drops off the queue; disabled until a level is picked) and
+  **Save** (fields only, stays in queue).
+- Unverify must NULL the verifier/timestamp stamp (the old inventory PATCH had a
+  bug: it passed `undefined`, which is a no-op — don't copy that).
+- Link the queue from wherever the "needs verification" count shows.
+
 ## Phase 8 Decommission (07/01/2026)
 
 Inventory app: deleted all moved code — `/api/{events,volunteers,alerts,alert-subscribers,twilio,event-templates}`, `/api/me/alerts`, UI pages `(app)/{events,volunteers,event-templates,alert-groups,account}`, public kiosk `app/events`, components `event-template-form`/`event-gear-dialog`/`push-toggle`, `lib/ops-hub-auth`. Middleware MOVED lists retained as friendly 503/redirect pointers. Prisma models for the old tables intentionally kept (data preserved; and removing them would make `prisma db push`/`migrate` want to drop tables — don't).
