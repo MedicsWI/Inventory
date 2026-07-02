@@ -4,12 +4,12 @@ import { authConfig } from "@/lib/auth.config";
 
 const { auth } = NextAuth(authConfig);
 
-// Phase 7 cutover (Ops Hub task #130). Moved API + UI paths are intercepted
-// here so users / external callers always see the right thing:
+// Phase 7 cutover (Ops Hub task #130); Phase 8 decommission completed 07/01/2026
+// (the underlying events/volunteers/alerts/twilio code is deleted). These lists
+// stay so stale bookmarks and external callers get a friendly pointer instead
+// of a bare 404:
 //   - API paths → return 503 with a JSON pointer to the Ops Hub
 //   - UI paths  → redirect to /moved which shows a friendly "this has moved" page
-// Once Phase 8 decommission lands (delete the underlying code), these lists go
-// away too.
 const MOVED_API_PREFIXES = [
   "/api/events",
   "/api/volunteers",

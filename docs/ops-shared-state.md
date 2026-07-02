@@ -60,6 +60,10 @@ Safe pattern: write a raw SQL `alter table` script and run it in the Supabase SQ
 - [ ] Paste each device ID into inventory `/admin/tile-links` (AED-1..6, XSERIES-1..4, etc.)
 - [ ] Set `inventory_item_id` on the matching ops hub `tile_devices` row so the live map click-through works
 
+## Phase 8 Decommission (07/01/2026)
+
+Inventory app: deleted all moved code — `/api/{events,volunteers,alerts,alert-subscribers,twilio,event-templates}`, `/api/me/alerts`, UI pages `(app)/{events,volunteers,event-templates,alert-groups,account}`, public kiosk `app/events`, components `event-template-form`/`event-gear-dialog`/`push-toggle`, `lib/ops-hub-auth`. Middleware MOVED lists retained as friendly 503/redirect pointers. Prisma models for the old tables intentionally kept (data preserved; and removing them would make `prisma db push`/`migrate` want to drop tables — don't).
+
 ## Key Context
 
 - **Ops Hub URL**: https://ops.medicswisconsin.com

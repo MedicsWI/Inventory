@@ -13,7 +13,7 @@
 import * as React from "react";
 import { Capacitor } from "@capacitor/core";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { ScanLine, X, RefreshCcw, Lightbulb, Keyboard } from "lucide-react";
+import { ScanLine, X, RefreshCcw, Lightbulb, Keyboard, Flashlight, FlashlightOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +49,8 @@ export function BarcodeScanner({
   const [showTips, setShowTips] = React.useState(false);
   const [tipIdx, setTipIdx] = React.useState(0);
   const [slowScan, setSlowScan] = React.useState(false);   // true after 10s without a hit
+  const [torchAvailable, setTorchAvailable] = React.useState(false);
+  const [torchOn, setTorchOn] = React.useState(false);
 
   // Rotate live tips when the panel is open
   React.useEffect(() => {
@@ -151,6 +153,17 @@ export function BarcodeScanner({
             },
           );
           startedRef.current = true;
+
+          // Torch (flashlight) support — mostly mobile back cameras. Non-standard
+          // capability, so feature-detect after the stream is live.
+          try {
+            const caps = scanner.getRunningTrackCapabilities() as MediaTrackCapabilities & {
+              torch?: boolean;
+            };
+            if (!cancelled) setTorchAvailable(!!caps.torch);
+          } catch {
+            /* no capabilities API — no torch button */
+          }
         }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -218,8 +231,24 @@ export function BarcodeScanner({
     setCaptured(false);
     setSlowScan(false);
     setLastSeen(null);
+    setTorchAvailable(false);
+    setTorchOn(false);
     safeStop();
     setRestartKey((k) => k + 1);
+  }
+
+  async function toggleTorch() {
+    const scanner = scannerRef.current;
+    if (!scanner) return;
+    try {
+      await scanner.applyVideoConstraints({
+        // @ts-expect-error — torch is a non-standard constraint, widely supported on mobile
+        advanced: [{ torch: !torchOn }],
+      });
+      setTorchOn((v) => !v);
+    } catch {
+      setTorchAvailable(false); // camera said no — hide the button
+    }
   }
 
   const isScanning = !captured && !error;
@@ -239,6 +268,18 @@ export function BarcodeScanner({
           <span className="font-medium">Scan barcode / QR</span>
         </div>
         <div className="flex items-center gap-2">
+          {torchAvailable && (
+            <Button
+              variant={torchOn ? "default" : "secondary"}
+              size="icon"
+              onClick={toggleTorch}
+              aria-label={torchOn ? "Turn flashlight off" : "Turn flashlight on"}
+              className="rounded-full h-12 w-12"
+              title={torchOn ? "Flashlight off" : "Flashlight on"}
+            >
+              {torchOn ? <FlashlightOff className="h-5 w-5" /> : <Flashlight className="h-5 w-5" />}
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="icon"

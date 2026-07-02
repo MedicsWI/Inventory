@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { can } from "@/lib/permissions";
 import { Html5Qrcode } from "html5-qrcode";
+import { toast } from "sonner";
 import { ScanLine, Plus, RefreshCcw, Loader2, Keyboard, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,12 +175,13 @@ export default function ScanPage() {
       const decoded = await decoder.scanFile(file, false);
       try { await decoder.clear(); } catch { /* ignore */ }
       await resolve(decoded);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+    } catch {
       setUnknownCode(null);
       setHit(null);
       // Couldn't decode — guide the user to the next best thing
-      alert(`Couldn't read the barcode in that photo: ${msg}\n\nTry getting closer, brighter light, or use the manual entry below.`);
+      toast.error("Couldn't read a barcode in that photo", {
+        description: "Try getting closer with brighter light, or type the code below.",
+      });
     } finally {
       setDecodingPhoto(false);
       try { document.body.removeChild(host); } catch { /* ignore */ }

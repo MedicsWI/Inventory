@@ -118,6 +118,10 @@ export async function GET(req: Request) {
   for (const c of categories) nameMap.set(`CATEGORY:${c.id}`, c.name);
   for (const u of users) nameMap.set(`USER:${u.id}`, u.name ?? u.email);
 
+  // MEDICs see the feed but not the raw before/after payloads — those can
+  // carry other users' emails and full record snapshots. Managers/admins get diffs.
+  const includePayloads = session.user.role !== "MEDIC";
+
   let enriched = logs.map((log) => {
     let entityName = nameMap.get(`${log.entityType}:${log.entityId}`) ?? null;
     if (!entityName && log.before && typeof log.before === "object" && !Array.isArray(log.before)) {
@@ -131,9 +135,9 @@ export async function GET(req: Request) {
       entityType: log.entityType,
       entityId: log.entityId,
       entityName,
-      before: log.before,
-      after: log.after,
-      metadata: log.metadata,
+      before: includePayloads ? log.before : null,
+      after: includePayloads ? log.after : null,
+      metadata: includePayloads ? log.metadata : null,
       user: log.user,
     };
   });
