@@ -47,6 +47,7 @@ export async function GET(req: Request) {
     };
   }
   if (locationId) where.where = { ...where.where, locationId };
+  if (searchParams.get("returnable") === "1") where.where = { ...where.where, returnable: true };
   if (!Number.isNaN(expiringWithin) && expiringWithin > 0) {
     const cutoff = new Date(Date.now() + expiringWithin * 24 * 60 * 60 * 1000);
     where.where = {

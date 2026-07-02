@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { Plus, Trash2, KeyRound, Upload, PackageOpen, Download, MessageSquare, Pencil, Check, X } from "lucide-react";
+import { Plus, Trash2, KeyRound, Upload, PackageOpen, Download, MessageSquare, MapPin, Pencil, Check, X } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
@@ -111,6 +111,7 @@ export default function AdminPage() {
           <Button asChild variant="outline"><Link href="/admin/import"><Upload className="h-4 w-4" /> CSV import</Link></Button>
           <Button asChild variant="outline"><Link href="/admin/export"><Download className="h-4 w-4" /> Export</Link></Button>
           <Button asChild variant="outline"><Link href="/admin/integrations"><MessageSquare className="h-4 w-4" /> Integrations</Link></Button>
+          <Button asChild variant="outline"><Link href="/admin/tile-links"><MapPin className="h-4 w-4" /> Tile links</Link></Button>
           <Button onClick={() => setCreating((v) => !v)}>
             <Plus className="h-4 w-4" /> New user
           </Button>

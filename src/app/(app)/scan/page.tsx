@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { can } from "@/lib/permissions";
 import { Html5Qrcode } from "html5-qrcode";
 import { ScanLine, Plus, RefreshCcw, Loader2, Keyboard, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,6 +57,8 @@ export default function ScanPage() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [decodingPhoto, setDecodingPhoto] = useState(false);
   const router = useRouter();
+  const { data: session } = useSession();
+  const canCreate = can(session?.user.role, "item:create");
 
   async function resolve(rawValue: string) {
     setOpen(false);
@@ -274,12 +278,19 @@ export default function ScanPage() {
             )}
 
             <div className="flex flex-col gap-2">
-              <Button asChild>
-                <Link href={createUrl()}>
-                  <Plus className="h-4 w-4" />
-                  {hit?.found ? "Create item from this product" : "Create new item with this code"}
-                </Link>
-              </Button>
+              {canCreate ? (
+                <Button asChild>
+                  <Link href={createUrl()}>
+                    <Plus className="h-4 w-4" />
+                    {hit?.found ? "Create item from this product" : "Create new item with this code"}
+                  </Link>
+                </Button>
+              ) : (
+                <p className="rounded-md border bg-muted/50 p-3 text-xs text-muted-foreground">
+                  This code isn&apos;t in inventory yet. Ask a manager or admin to add it — copy the
+                  code above so they can create the item.
+                </p>
+              )}
               <Button variant="outline" onClick={() => { setUnknownCode(null); setHit(null); setOpen(true); }}>
                 <RefreshCcw className="h-4 w-4" /> Scan again
               </Button>

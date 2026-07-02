@@ -51,9 +51,14 @@ Safe pattern: write a raw SQL `alter table` script and run it in the Supabase SQ
   - X-Series 1-4 → category **Cardiac Monitors** (barcodes XSERIES-1..4; Zoll X Series = full monitor/defibs)
   - SQL: `prisma/sql/2026-06-04_seed_defib_assets.sql`, `prisma/sql/2026-06-04_split_defib_categories.sql`
 
+### Done (07/01/2026)
+- [x] Batteries swapped in all 27 Tiles
+- [x] Inventory app bulk-link page built: `/admin/tile-links` — lists all returnable items with inline `tile_device_id` field (unique-violation toast on duplicate paste). `/api/items?returnable=1` filter added.
+
 ### Still to do
-- [ ] After battery swap: register all 27 Tile devices at `/admin/tile-devices` in the ops hub
-- [ ] Link registered devices to inventory items: set `tile_device_id` on each item (AED-1..6, XSERIES-1..4) and `inventory_item_id` on the matching ops hub `tile_devices` row
+- [ ] Register all 27 Tile devices at `/admin/tile-devices` in the ops hub
+- [ ] Paste each device ID into inventory `/admin/tile-links` (AED-1..6, XSERIES-1..4, etc.)
+- [ ] Set `inventory_item_id` on the matching ops hub `tile_devices` row so the live map click-through works
 
 ## Key Context
 
