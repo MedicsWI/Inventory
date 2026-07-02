@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RowsSkeleton } from "@/components/ui/skeleton";
+import { AlertPrefsCard } from "@/components/alert-prefs-card";
 import { formatDate } from "@/lib/utils";
 
 type Notification = {
@@ -93,6 +94,8 @@ export default function NotificationsPage() {
           </Button>
         </div>
       </header>
+
+      <AlertPrefsCard />
 
       <Card>
         <CardHeader><CardTitle>Recent</CardTitle></CardHeader>
