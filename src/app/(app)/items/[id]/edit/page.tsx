@@ -23,6 +23,7 @@ type Loaded = {
   returnable?: boolean;
   tileDeviceId?: string | null;
   tags?: { id: string; name: string }[];
+  updatedAt?: string;
 };
 
 export default function EditItemPage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +31,9 @@ export default function EditItemPage({ params }: { params: Promise<{ id: string 
   const { data, isLoading } = useQuery({
     queryKey: ["item", id],
     queryFn: () => api.get<Loaded>(`/api/items/${id}`),
+    // Always refetch — the form must never be seeded from a stale cached copy.
+    refetchOnMount: "always",
+    staleTime: 0,
   });
 
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>;
@@ -55,5 +59,7 @@ export default function EditItemPage({ params }: { params: Promise<{ id: string 
     tagIds: (data.tags ?? []).map((t) => t.id),
   };
 
-  return <ItemForm mode="edit" initial={initial} />;
+  // key remounts the form when fresh data lands, so it re-seeds instead of
+  // keeping values captured from the cached first render.
+  return <ItemForm key={data.updatedAt ?? data.id} mode="edit" initial={initial} />;
 }

@@ -55,6 +55,27 @@ const empty: ItemFormValue = {
   tagIds: [],
 };
 
+function buildPayload(v: ItemFormValue) {
+  return {
+    name: v.name,
+    description: v.description || null,
+    barcode: v.barcode || null,
+    sku: v.sku || null,
+    quantity: Number(v.quantity) || 0,
+    unit: v.unit || null,
+    lotNumber: v.lotNumber || null,
+    expirationDate: v.expirationDate ? new Date(v.expirationDate).toISOString() : null,
+    lowStockThreshold: v.lowStockThreshold === "" ? null : Number(v.lowStockThreshold),
+    locationId: v.locationId || null,
+    categoryId: v.categoryId || null,
+    notes: v.notes || null,
+    photoUrl: v.photoUrl,
+    returnable: v.returnable,
+    tileDeviceId: v.tileDeviceId.trim() || null,
+    tagIds: v.tagIds,
+  };
+}
+
 export function ItemForm({ initial, mode }: { initial?: ItemFormValue; mode: "create" | "edit" }) {
   const router = useRouter();
   const qc = useQueryClient();
@@ -70,30 +91,25 @@ export function ItemForm({ initial, mode }: { initial?: ItemFormValue; mode: "cr
 
   const save = useMutation({
     mutationFn: () => {
-      const payload = {
-        name: form.name,
-        description: form.description || null,
-        barcode: form.barcode || null,
-        sku: form.sku || null,
-        quantity: Number(form.quantity) || 0,
-        unit: form.unit || null,
-        lotNumber: form.lotNumber || null,
-        expirationDate: form.expirationDate
-          ? new Date(form.expirationDate).toISOString()
-          : null,
-        lowStockThreshold:
-          form.lowStockThreshold === "" ? null : Number(form.lowStockThreshold),
-        locationId: form.locationId || null,
-        categoryId: form.categoryId || null,
-        notes: form.notes || null,
-        photoUrl: form.photoUrl,
-        returnable: form.returnable,
-        tileDeviceId: form.tileDeviceId.trim() || null,
-        tagIds: form.tagIds,
-      };
-      return mode === "create"
-        ? api.post("/api/items", payload)
-        : api.patch(`/api/items/${initial!.id}`, payload);
+      const payload = buildPayload(form);
+      if (mode === "create") return api.post("/api/items", payload);
+
+      // EDIT: send only the fields the user actually changed. The form is
+      // seeded once from (possibly cached) data — PATCHing the full payload
+      // silently reverts anything that changed since it loaded (location
+      // moves, quantity adjustments, checkouts). Diffing prevents that.
+      const base = buildPayload(initial ?? empty);
+      const diff: Record<string, unknown> = {};
+      for (const key of Object.keys(payload) as (keyof typeof payload)[]) {
+        const next = payload[key];
+        const prev = base[key];
+        const changed = Array.isArray(next)
+          ? JSON.stringify([...next].sort()) !== JSON.stringify([...(prev as string[])].sort())
+          : next !== prev;
+        if (changed) diff[key] = next;
+      }
+      if (Object.keys(diff).length === 0) return Promise.resolve({ id: initial!.id });
+      return api.patch(`/api/items/${initial!.id}`, diff);
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["items"] });

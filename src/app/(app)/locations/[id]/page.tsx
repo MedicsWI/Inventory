@@ -1,15 +1,20 @@
 "use client";
 
 import { use } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { ChevronLeft, Pencil, QrCode } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { ChevronLeft, Pencil, QrCode, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ItemCard, type ItemCardData } from "@/components/item-card";
 import { BarcodeLabel } from "@/components/barcode-label";
+import { useConfirm } from "@/components/dialog-provider";
 
 type LocationDetail = {
   id: string;
@@ -24,10 +29,44 @@ type LocationDetail = {
 
 export default function LocationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
+  const qc = useQueryClient();
+  const confirm = useConfirm();
+  const { data: session } = useSession();
+  const canDelete = can(session?.user.role, "location:delete");
+
   const { data, isLoading } = useQuery({
     queryKey: ["location", id],
     queryFn: () => api.get<LocationDetail>(`/api/locations/${id}`),
   });
+
+  const del = useMutation({
+    mutationFn: () => api.del(`/api/locations/${id}`),
+    onSuccess: () => {
+      toast.success("Location deleted");
+      qc.invalidateQueries({ queryKey: ["locs-flat"] });
+      qc.invalidateQueries({ queryKey: ["locations"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      router.push("/locations");
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+
+  async function onDelete() {
+    if (!data) return;
+    const parts: string[] = [];
+    if (data.items.length) parts.push(`${data.items.length} item(s) here will show "no location" — move them first if that matters`);
+    if (data.children.length) parts.push(`${data.children.length} sub-location(s) will move to the top level`);
+    const ok = await confirm({
+      title: `Delete "${data.name}"?`,
+      description: parts.length
+        ? `${parts.join(". ")}. This can't be undone.`
+        : "This location is empty. This can't be undone.",
+      confirmText: "Delete location",
+      variant: "destructive",
+    });
+    if (ok) del.mutate();
+  }
 
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>;
   if (!data) return <div>Not found.</div>;
@@ -48,11 +87,18 @@ export default function LocationDetailPage({ params }: { params: Promise<{ id: s
             </div>
           )}
         </div>
-        <Button asChild variant="outline">
-          <Link href={`/locations/${data.id}/edit`}>
-            <Pencil className="h-4 w-4" /> Edit
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/locations/${data.id}/edit`}>
+              <Pencil className="h-4 w-4" /> Edit
+            </Link>
+          </Button>
+          {canDelete && (
+            <Button variant="destructive" onClick={onDelete} disabled={del.isPending}>
+              <Trash2 className="h-4 w-4" /> Delete
+            </Button>
+          )}
+        </div>
       </header>
 
       {data.barcode && (
