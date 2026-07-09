@@ -3,14 +3,14 @@ import * as React from "react";
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronRight, ChevronDown, FolderTree, Truck, Box, Package, Layers, GripVertical } from "lucide-react";
+import { ChevronRight, ChevronDown, FolderTree, Truck, Box, Package, Layers, Briefcase, GripVertical } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 export type LocationNode = {
   id: string;
   name: string;
-  type: "STATION" | "VEHICLE" | "BOX" | "KIT" | "SHELF";
+  type: "STATION" | "VEHICLE" | "BOX" | "KIT" | "BAG" | "SHELF";
   itemCount?: number;
   children?: LocationNode[];
 };
@@ -21,6 +21,7 @@ const iconFor = (t: LocationNode["type"]) => {
     case "VEHICLE": return Truck;
     case "BOX": return Box;
     case "KIT": return Package;
+    case "BAG": return Briefcase;
     case "SHELF": return Layers;
   }
 };

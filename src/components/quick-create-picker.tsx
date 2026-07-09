@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export type PickKind = "tag" | "category" | "location";
-export type LocationType = "STATION" | "VEHICLE" | "BOX" | "KIT" | "SHELF";
+export type LocationType = "STATION" | "VEHICLE" | "BOX" | "KIT" | "BAG" | "SHELF";
 
 type GenericOption = { id: string; name: string };
 type LocationOption = GenericOption & { type?: LocationType };
@@ -31,7 +31,7 @@ const KIND_ENDPOINTS: Record<PickKind, string> = {
   location: "/api/locations",
 };
 
-const LOCATION_TYPES: LocationType[] = ["STATION", "VEHICLE", "BOX", "KIT", "SHELF"];
+const LOCATION_TYPES: LocationType[] = ["STATION", "VEHICLE", "BOX", "KIT", "BAG", "SHELF"];
 
 export function useQuickCreate(kind: PickKind) {
   const qc = useQueryClient();

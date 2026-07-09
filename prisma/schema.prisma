@@ -113,6 +113,7 @@ enum LocationType {
   VEHICLE // ambulance / truck
   BOX // storage box / tote
   KIT // jump bag / trauma kit
+  BAG // medic bag / event bag
   SHELF // shelf / bin
 }
 

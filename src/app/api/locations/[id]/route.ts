@@ -8,7 +8,7 @@ import { logActivity } from "@/lib/activity";
 
 const updateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
-  type: z.enum(["STATION", "VEHICLE", "BOX", "KIT", "SHELF"]).optional(),
+  type: z.enum(["STATION", "VEHICLE", "BOX", "KIT", "BAG", "SHELF"]).optional(),
   parentId: z.string().cuid().nullable().optional(),
   barcode: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),

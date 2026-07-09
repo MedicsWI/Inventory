@@ -16,13 +16,13 @@ import { Plus } from "lucide-react";
 type LocationFormValue = {
   id?: string;
   name: string;
-  type: "STATION" | "VEHICLE" | "BOX" | "KIT" | "SHELF";
+  type: "STATION" | "VEHICLE" | "BOX" | "KIT" | "BAG" | "SHELF";
   parentId: string | null;
   barcode: string | null;
   notes: string | null;
 };
 
-const TYPES: LocationFormValue["type"][] = ["STATION", "VEHICLE", "BOX", "KIT", "SHELF"];
+const TYPES: LocationFormValue["type"][] = ["STATION", "VEHICLE", "BOX", "KIT", "BAG", "SHELF"];
 
 export function LocationForm({ initial, mode }: { initial?: LocationFormValue; mode: "create" | "edit" }) {
   const router = useRouter();

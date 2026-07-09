@@ -9,7 +9,7 @@ import { prismaErrorResponse } from "@/lib/api-errors";
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
-  type: z.enum(["STATION", "VEHICLE", "BOX", "KIT", "SHELF"]),
+  type: z.enum(["STATION", "VEHICLE", "BOX", "KIT", "BAG", "SHELF"]),
   parentId: z.string().cuid().nullable().optional(),
   barcode: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),

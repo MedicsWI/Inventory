@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ChevronLeft, Pencil, QrCode, Trash2 } from "lucide-react";
+import { ChevronLeft, Pencil, QrCode, Trash2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { can } from "@/lib/permissions";
@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ItemCard, type ItemCardData } from "@/components/item-card";
 import { BarcodeLabel } from "@/components/barcode-label";
-import { useConfirm } from "@/components/dialog-provider";
+import { useConfirm, usePrompt } from "@/components/dialog-provider";
 
 type LocationDetail = {
   id: string;
@@ -32,13 +32,44 @@ export default function LocationDetailPage({ params }: { params: Promise<{ id: s
   const router = useRouter();
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const prompt = usePrompt();
   const { data: session } = useSession();
   const canDelete = can(session?.user.role, "location:delete");
+  const canClone = can(session?.user.role, "location:create");
 
   const { data, isLoading } = useQuery({
     queryKey: ["location", id],
     queryFn: () => api.get<LocationDetail>(`/api/locations/${id}`),
   });
+
+  const clone = useMutation({
+    mutationFn: (name: string) =>
+      api.post<{ id: string; locations: number; items: number }>(`/api/locations/${id}/clone`, { name }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["locations-tree"] });
+      qc.invalidateQueries({ queryKey: ["locs-flat"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      toast.success(
+        `Cloned — ${r.items} item(s)${r.locations > 1 ? ` across ${r.locations} locations` : ""}. Print new labels; barcodes and Tile links don't copy.`,
+      );
+      router.push(`/locations/${r.id}`);
+    },
+    onError: (e) => toast.error(String(e)),
+  });
+
+  async function onClone() {
+    if (!data) return;
+    const name = await prompt({
+      title: `Clone "${data.name}"`,
+      description:
+        "Copies this location, everything inside it (sub-locations and items with their quantities), and item details. Barcodes, Tile trackers, lots, and expiration dates don't copy — the new bag gets its own.",
+      label: "Name for the copy",
+      initialValue: `${data.name} 2`,
+      confirmText: "Clone",
+      minLength: 1,
+    });
+    if (name?.trim()) clone.mutate(name.trim());
+  }
 
   const del = useMutation({
     mutationFn: () => api.del(`/api/locations/${id}`),
@@ -88,6 +119,11 @@ export default function LocationDetailPage({ params }: { params: Promise<{ id: s
           )}
         </div>
         <div className="flex gap-2">
+          {canClone && (
+            <Button variant="outline" onClick={onClone} disabled={clone.isPending}>
+              <Copy className="h-4 w-4" /> {clone.isPending ? "Cloning…" : "Clone"}
+            </Button>
+          )}
           <Button asChild variant="outline">
             <Link href={`/locations/${data.id}/edit`}>
               <Pencil className="h-4 w-4" /> Edit

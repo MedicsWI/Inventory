@@ -8,7 +8,7 @@ import { LocationForm } from "@/components/location-form";
 type Loaded = {
   id: string;
   name: string;
-  type: "STATION" | "VEHICLE" | "BOX" | "KIT" | "SHELF";
+  type: "STATION" | "VEHICLE" | "BOX" | "KIT" | "BAG" | "SHELF";
   parentId: string | null;
   barcode: string | null;
   notes: string | null;
