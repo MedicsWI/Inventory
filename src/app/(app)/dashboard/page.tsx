@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { ScanLine, Plus, Boxes, Clock } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { DashboardStats } from "@/components/dashboard-stats";
 import { ItemCard, type ItemCardData } from "@/components/item-card";
@@ -27,6 +29,7 @@ type DashboardData = {
 };
 
 export default function DashboardPage() {
+  const { data: session } = useSession();
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api.get<DashboardData>("/api/dashboard"),
@@ -43,9 +46,11 @@ export default function DashboardPage() {
           <Button asChild>
             <Link href="/scan"><ScanLine className="h-4 w-4" /> Scan</Link>
           </Button>
-          <Button asChild variant="outline">
-            <Link href="/items/new"><Plus className="h-4 w-4" /> Add item</Link>
-          </Button>
+          {can(session?.user.role, "item:create") && (
+            <Button asChild variant="outline">
+              <Link href="/items/new"><Plus className="h-4 w-4" /> Add item</Link>
+            </Button>
+          )}
           {/* "Send alert" tile moved to Ops Hub on 05/27/2026 (Phase 7 cutover). */}
         </div>
       </header>

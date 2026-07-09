@@ -1,15 +1,14 @@
 // Seed script — creates a starter admin, sample categories, locations, items.
 // Run with: pnpm db:seed
+// Sign-in is Entra SSO or magic link ONLY (password auth was removed 07/01/2026),
+// so seed with a real mailbox you can receive the magic link at.
 import { PrismaClient, LocationType, Role } from "@prisma/client";
-import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
   // --- Admin user ---
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@medicswi.local";
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "ChangeMe!123";
-  const passwordHash = await bcrypt.hash(adminPassword, 12);
 
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },
@@ -18,10 +17,11 @@ async function main() {
       email: adminEmail,
       name: "Inventory Admin",
       role: Role.ADMIN,
-      passwordHash,
     },
   });
-  console.log(`Seeded admin: ${admin.email} / ${adminPassword}  (CHANGE THIS)`);
+  console.log(
+    `Seeded admin: ${admin.email} — sign in with M365 SSO or request a magic link at /login (no password).`,
+  );
 
   // --- Categories ---
   const categories = await Promise.all(

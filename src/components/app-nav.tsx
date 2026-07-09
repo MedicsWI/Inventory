@@ -174,7 +174,7 @@ export function AppNav() {
                   pathname === href ||
                   (href !== "/admin" && pathname.startsWith(href + "/")) ||
                   // /admin should only highlight exact and /admin/import (not /admin/checkouts which has its own row)
-                  (href === "/admin" && (pathname === "/admin" || pathname.startsWith("/admin/import") || pathname.startsWith("/admin/export") || pathname.startsWith("/admin/integrations")));
+                  (href === "/admin" && (pathname === "/admin" || pathname.startsWith("/admin/import") || pathname.startsWith("/admin/export") || pathname.startsWith("/admin/integrations") || pathname.startsWith("/admin/tile-links")));
                 return (
                   <Link
                     key={href}

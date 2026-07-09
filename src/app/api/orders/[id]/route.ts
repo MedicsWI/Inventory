@@ -10,13 +10,22 @@ const patchSchema = z.object({
   vendorEmail: z.union([z.string().email(), z.literal("")]).nullable().optional(),
   vendorContact: z.string().max(120).nullable().optional(),
   vendorPhone: z.string().max(40).nullable().optional(),
-  orderNumber: z.string().nullable().optional(),
+  orderNumber: z.string().max(80).nullable().optional(),
   trackingUrl: z.string().url().nullable().optional(),
-  status: z.enum(["DRAFT", "ORDERED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELED"]).optional(),
+  // PARTIAL/RECEIVED only ever come from the receive routes (they move stock);
+  // free-form writes desynced status from line state.
+  status: z.enum(["ORDERED", "SHIPPED", "CANCELED"]).optional(),
   expectedAt: z.string().datetime().nullable().optional(),
-  notes: z.string().nullable().optional(),
-  vendorNotes: z.string().nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+  vendorNotes: z.string().max(4000).nullable().optional(),
 });
+
+// Allowed manual transitions. Receiving-driven states are owned by /receive.
+const STATUS_TRANSITIONS: Record<string, string[]> = {
+  ORDERED: ["DRAFT"], // mark ordered without emailing (phone order)
+  SHIPPED: ["ORDERED", "PARTIAL"],
+  CANCELED: ["DRAFT", "ORDERED", "SHIPPED", "PARTIAL"],
+};
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -39,22 +48,41 @@ export async function PATCH(req: Request, ctx: Ctx) {
   catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const { id } = await ctx.params;
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const updated = await prisma.incomingOrder.update({
-    where: { id },
-    data: {
-      ...parsed.data,
-      expectedAt:
-        parsed.data.expectedAt === undefined
-          ? undefined
-          : parsed.data.expectedAt === null
-            ? null
-            : new Date(parsed.data.expectedAt),
-    },
-  });
+  const data = {
+    ...parsed.data,
+    // Normalize "" → null (POST does this; PATCH must match)
+    vendorEmail: parsed.data.vendorEmail === "" ? null : parsed.data.vendorEmail,
+    expectedAt:
+      parsed.data.expectedAt === undefined
+        ? undefined
+        : parsed.data.expectedAt === null
+          ? null
+          : new Date(parsed.data.expectedAt),
+  };
+
+  if (data.status) {
+    const allowedFrom = STATUS_TRANSITIONS[data.status] ?? [];
+    const flipped = await prisma.incomingOrder.updateMany({
+      where: { id, status: { in: allowedFrom as ("DRAFT" | "ORDERED" | "SHIPPED" | "PARTIAL")[] } },
+      data,
+    });
+    if (flipped.count === 0) {
+      const cur = await prisma.incomingOrder.findUnique({ where: { id }, select: { status: true } });
+      if (!cur) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: `Can't move a ${cur.status} order to ${data.status}.` },
+        { status: 409 },
+      );
+    }
+    const updated = await prisma.incomingOrder.findUnique({ where: { id } });
+    return NextResponse.json(updated);
+  }
+
+  const updated = await prisma.incomingOrder.update({ where: { id }, data });
   return NextResponse.json(updated);
 }
 

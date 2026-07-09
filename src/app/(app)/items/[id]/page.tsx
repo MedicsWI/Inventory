@@ -4,9 +4,11 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { ChevronLeft, Minus, Plus, Trash2, QrCode, Pencil, Check, PackageOpen, CheckCircle2, History } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/dialog-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +50,9 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
   const router = useRouter();
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const { data: session } = useSession();
+  const canEdit = can(session?.user.role, "item:update");
+  const canDelete = can(session?.user.role, "item:delete");
   const { data, isLoading } = useQuery({
     queryKey: ["item", id],
     queryFn: () => api.get<ItemDetail>(`/api/items/${id}`),
@@ -63,10 +68,9 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
   const [showCheckout, setShowCheckout] = useState(false);
 
   const adjustQty = useMutation({
+    // Atomic delta — see /api/items/[id] quantityDelta.
     mutationFn: (delta: number) =>
-      api.patch<ItemDetail>(`/api/items/${id}`, {
-        quantity: Math.max(0, (data?.quantity ?? 0) + delta),
-      }),
+      api.patch<ItemDetail>(`/api/items/${id}`, { quantityDelta: delta }),
     onSuccess: () => {
       setTouched(true);
       qc.invalidateQueries({ queryKey: ["item", id] });
@@ -111,9 +115,11 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
           <Button asChild variant="outline" size="sm">
             <Link href={`/items/${id}/history`}><History className="h-4 w-4" /> History</Link>
           </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/items/${id}/edit`}><Pencil className="h-4 w-4" /> Edit</Link>
-          </Button>
+          {canEdit && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/items/${id}/edit`}><Pencil className="h-4 w-4" /> Edit</Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -252,20 +258,23 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
         <Button variant="ghost" onClick={() => router.back()}>
           <ChevronLeft className="h-4 w-4" /> Back
         </Button>
-        <Button
-          variant="destructive"
-          onClick={async () => {
-            const ok = await confirm({
-              title: `Delete ${data.name}?`,
-              description: "This removes the item from inventory. History stays in the activity log.",
-              confirmText: "Delete item",
-              variant: "destructive",
-            });
-            if (ok) del.mutate();
-          }}
-        >
-          <Trash2 className="h-4 w-4" /> Delete
-        </Button>
+        {canDelete && (
+          <Button
+            variant="destructive"
+            disabled={del.isPending}
+            onClick={async () => {
+              const ok = await confirm({
+                title: `Delete ${data.name}?`,
+                description: "This removes the item from inventory. History stays in the activity log.",
+                confirmText: "Delete item",
+                variant: "destructive",
+              });
+              if (ok) del.mutate();
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        )}
       </div>
 
       {touched && (

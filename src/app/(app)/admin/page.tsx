@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Upload, PackageOpen, Download, MessageSquare, MapPin, Pencil, Check, X } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,8 @@ export default function AdminPage() {
   const qc = useQueryClient();
   const { data: session } = useSession();
   const meId = session?.user.id;
+  // The user-management API is ADMIN-only — hide the UI from MANAGERs too.
+  const canManageUsers = can(session?.user.role, "user:manage");
   const confirm = useConfirm();
 
   const users = useQuery({
@@ -106,13 +109,15 @@ export default function AdminPage() {
           <Button asChild variant="outline"><Link href="/admin/export"><Download className="h-4 w-4" /> Export</Link></Button>
           <Button asChild variant="outline"><Link href="/admin/integrations"><MessageSquare className="h-4 w-4" /> Integrations</Link></Button>
           <Button asChild variant="outline"><Link href="/admin/tile-links"><MapPin className="h-4 w-4" /> Tile links</Link></Button>
-          <Button onClick={() => setCreating((v) => !v)}>
-            <Plus className="h-4 w-4" /> New user
-          </Button>
+          {canManageUsers && (
+            <Button onClick={() => setCreating((v) => !v)}>
+              <Plus className="h-4 w-4" /> New user
+            </Button>
+          )}
         </div>
       </header>
 
-      {creating && (
+      {canManageUsers && creating && (
         <Card>
           <CardHeader><CardTitle>Create user</CardTitle></CardHeader>
           <CardContent className="grid sm:grid-cols-2 gap-3">
@@ -151,6 +156,7 @@ export default function AdminPage() {
         </Card>
       )}
 
+      {canManageUsers && (
       <Card>
         <CardHeader><CardTitle>Users</CardTitle></CardHeader>
         <CardContent>
@@ -355,6 +361,7 @@ export default function AdminPage() {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

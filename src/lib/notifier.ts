@@ -135,7 +135,7 @@ export async function sendEmailAlert(input: AlertChannelInputs): Promise<{ ok: b
       </div>
       <h2 style="margin:8px 0 12px;font-size:18px">${escapeHtml(input.title)}</h2>
       ${input.body ? `<p style="margin:0 0 12px;line-height:1.5">${escapeHtml(input.body)}</p>` : ""}
-      ${input.linkUrl ? `<p style="margin:0 0 12px"><a href="${input.linkUrl}" style="background:#0ea5e9;color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block">View in app</a></p>` : ""}
+      ${input.linkUrl ? `<p style="margin:0 0 12px"><a href="${escapeHtml(input.linkUrl)}" style="background:#0ea5e9;color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block">View in app</a></p>` : ""}
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0" />
       <p style="font-size:11px;color:#666;margin:0">
         Medics Wisconsin · Inventory<br/>
@@ -160,7 +160,7 @@ export async function sendTeamsAlert(input: AlertChannelInputs): Promise<{ ok: b
         </div>
         <h2 style="margin:8px 0 12px;font-size:18px">${escapeHtml(input.title)}</h2>
         ${input.body ? `<p style="margin:0 0 12px;line-height:1.5">${escapeHtml(input.body)}</p>` : ""}
-        ${input.linkUrl ? `<p style="margin:0 0 12px"><a href="${input.linkUrl}" style="background:#0ea5e9;color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block">View in app</a></p>` : ""}
+        ${input.linkUrl ? `<p style="margin:0 0 12px"><a href="${escapeHtml(input.linkUrl)}" style="background:#0ea5e9;color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block">View in app</a></p>` : ""}
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0" />
         <p style="font-size:11px;color:#666;margin:0">Medics WI Inventory · automated alert</p>
       </div>
@@ -228,6 +228,7 @@ export async function sendTeamsAlert(input: AlertChannelInputs): Promise<{ ok: b
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10_000), // a hung webhook must not stall the sweep
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");

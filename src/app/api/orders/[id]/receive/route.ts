@@ -30,6 +30,14 @@ export async function POST(req: Request, ctx: Ctx) {
     include: { lines: true },
   });
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  // Only sent orders can be received — a CANCELED order must not be silently
+  // un-canceled, and a DRAFT was never ordered in the first place.
+  if (!["ORDERED", "SHIPPED", "PARTIAL"].includes(order.status)) {
+    return NextResponse.json(
+      { error: `Order is ${order.status} — receiving is only possible on ordered/shipped/partial orders.` },
+      { status: 400 },
+    );
+  }
 
   const line = order.lines.find((l) => l.id === parsed.data.lineId);
   if (!line) return NextResponse.json({ error: "Line not found" }, { status: 404 });

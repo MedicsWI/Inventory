@@ -16,6 +16,21 @@ export function formatDate(d: Date | string | null | undefined) {
   });
 }
 
+// For DATE-ONLY fields (expiration, need-by, expected return) stored as UTC
+// midnight: render in UTC. Rendering them in local time shifts the day back
+// (07/04 stored → "07/03" shown in America/Chicago). Real timestamps
+// (checkedOutAt, createdAt, …) should keep using formatDate.
+export function formatDateOnly(d: Date | string | null | undefined) {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 // Human-friendly verbs for activity log entries
 export function actionLabel(action: string): string {
   switch (action) {

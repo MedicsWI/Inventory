@@ -78,6 +78,19 @@ export async function POST(req: Request) {
     (i) => i.lowStockThreshold != null && i.quantity <= i.lowStockThreshold,
   );
 
+  // Overdue checkouts — gear past its expected return date and still out.
+  const overdueCheckouts = await prisma.checkout.findMany({
+    where: { returnedAt: null, expectedReturnAt: { lt: now } },
+    select: {
+      id: true,
+      quantity: true,
+      expectedReturnAt: true,
+      item: { select: { id: true, name: true } },
+      user: { select: { name: true, email: true } },
+    },
+    take: 200,
+  });
+
   const appBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXTAUTH_URL ?? "";
   const channelStats = { emailSent: 0, emailFailed: 0, teamsSent: 0, teamsFailed: 0, pushSent: 0, pushFailed: 0, smsSent: 0, smsFailed: 0 };
   // Teams is a SHARED channel — dedupe so multiple opted-in admins don't cause duplicate posts.
@@ -140,6 +153,30 @@ export async function POST(req: Request) {
           severity: item.quantity === 0 ? "critical" : "warning",
         });
       }
+    }
+
+    // Overdue checkouts — operational alert, no separate toggle. Dedupe per
+    // checkout per 24h via the payload key like the other alert types.
+    for (const c of overdueCheckouts) {
+      const key = `SYSTEM:${JSON.stringify({ checkoutId: c.id })}`;
+      if (seen.has(key)) continue;
+
+      const days = Math.floor((now.getTime() - (c.expectedReturnAt?.getTime() ?? now.getTime())) / 86400000);
+      const borrower = c.user.name ?? c.user.email;
+      const title = `Overdue: ${c.item.name} (${c.quantity}) — ${borrower}`;
+      const body = days > 0 ? `Expected back ${days}d ago` : "Expected back today";
+
+      await prisma.notification.create({
+        data: { userId: u.id, type: "SYSTEM", title, body, payload: { checkoutId: c.id } },
+      });
+      created++;
+
+      await fanout(u, {
+        title,
+        body,
+        linkUrl: appBase ? `${appBase}/checkouts` : undefined,
+        severity: days >= 7 ? "critical" : "warning",
+      });
     }
   }
 

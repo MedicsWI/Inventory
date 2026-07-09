@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Send, Save } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -23,6 +23,7 @@ type Line = {
 
 export default function NewOrderPage() {
   const router = useRouter();
+  const qc = useQueryClient();
   const items = useQuery({
     queryKey: ["items-lookup"],
     queryFn: () => api.get<ItemLookup>("/api/items"),
@@ -74,6 +75,7 @@ export default function NewOrderPage() {
       }),
     onSuccess: (r, status) => {
       toast.success(status === "DRAFT" ? "Saved as draft." : "Saved.");
+      qc.invalidateQueries({ queryKey: ["orders"] });
       router.push(`/orders/${r.id}`);
     },
     onError: (e) => toast.error(String(e)),
@@ -81,7 +83,7 @@ export default function NewOrderPage() {
 
   // "Save & send" = save as DRAFT, then immediately call /send
   const saveAndSend = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<{ id: string; sendError?: string }> => {
       if (!vendorEmail) throw new Error("Add a vendor email before sending.");
       const created = await api.post<{ id: string }>("/api/orders", {
         vendor,
@@ -104,11 +106,22 @@ export default function NewOrderPage() {
             unitCost: l.unitCost === "" ? null : Number(l.unitCost),
           })),
       });
-      await api.post(`/api/orders/${created.id}/send`, {});
-      return created;
+      // Order exists at this point — if sending fails, don't lose it. Surface the
+      // failure but still route the user to the saved draft.
+      try {
+        await api.post(`/api/orders/${created.id}/send`, {});
+      } catch (e) {
+        return { id: created.id, sendError: String(e) };
+      }
+      return { id: created.id };
     },
     onSuccess: (r) => {
-      toast.success(`Sent to ${vendorEmail}.`);
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      if (r.sendError) {
+        toast.error(`Order saved as draft — sending failed: ${r.sendError}`);
+      } else {
+        toast.success(`Sent to ${vendorEmail}.`);
+      }
       router.push(`/orders/${r.id}`);
     },
     onError: (e) => toast.error(String(e)),
@@ -220,7 +233,7 @@ export default function NewOrderPage() {
                   min={1}
                   inputMode="numeric"
                   value={line.expectedQty}
-                  onChange={(e) => updateLine(i, { expectedQty: Number(e.target.value) || 1 })}
+                  onChange={(e) => updateLine(i, { expectedQty: Math.max(1, Math.floor(Number(e.target.value)) || 1) })}
                   className="tabular-nums"
                 />
               </div>
@@ -232,7 +245,7 @@ export default function NewOrderPage() {
                   min={0}
                   inputMode="decimal"
                   value={line.unitCost}
-                  onChange={(e) => updateLine(i, { unitCost: e.target.value === "" ? "" : Number(e.target.value) })}
+                  onChange={(e) => updateLine(i, { unitCost: e.target.value === "" ? "" : Math.max(0, Number(e.target.value) || 0) })}
                   placeholder="optional"
                   className="tabular-nums"
                 />

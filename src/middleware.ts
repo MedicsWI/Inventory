@@ -88,5 +88,8 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next|favicon.ico|icons|.*\\.(?:svg|png|jpg|jpeg|webp|gif)).*)"],
+  // manifest.webmanifest + sw.js are fetched WITHOUT credentials by the
+  // browser — running them through auth 302s them to /login and breaks PWA
+  // install + service-worker updates.
+  matcher: ["/((?!_next|favicon.ico|manifest.webmanifest|sw.js|icons|.*\\.(?:svg|png|jpg|jpeg|webp|gif|ico)).*)"],
 };

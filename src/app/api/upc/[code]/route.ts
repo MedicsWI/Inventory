@@ -48,6 +48,7 @@ export async function GET(_req: Request, ctx: Ctx) {
       },
       // Cache successful lookups for 24h to spare the trial quota.
       next: { revalidate: 86400 },
+      signal: AbortSignal.timeout(5_000),
     });
 
     if (res.status === 429) {

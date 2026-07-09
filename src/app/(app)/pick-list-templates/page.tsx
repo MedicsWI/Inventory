@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { Plus, Settings, ChevronLeft } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type Row = { id: string; name: string; description: string | null; _count: { items: number } };
 
 export default function TemplatesPage() {
+  const { data: session } = useSession();
   const { data, isLoading } = useQuery({
     queryKey: ["pl-templates"],
     queryFn: () => api.get<Row[]>("/api/pick-list-templates"),
@@ -30,9 +33,11 @@ export default function TemplatesPage() {
             Reusable definitions. Start a pick list from a template to get its line items pre-filled.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/pick-list-templates/new"><Plus className="h-4 w-4" /> New template</Link>
-        </Button>
+        {can(session?.user.role, "location:create") && (
+          <Button asChild>
+            <Link href="/pick-list-templates/new"><Plus className="h-4 w-4" /> New template</Link>
+          </Button>
+        )}
       </header>
 
       <Card>

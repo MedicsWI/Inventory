@@ -30,6 +30,7 @@ async function getAccessToken(): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params,
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -82,6 +83,7 @@ export async function sendViaGraph(msg: GraphMessage): Promise<{ ok: boolean; er
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
     });
     if (res.status === 202) return { ok: true };           // success — Graph returns 202 Accepted
     const text = await res.text().catch(() => "");

@@ -16,8 +16,11 @@ const createSchema = z.object({
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  try { assertCan(session.user.role, "user:manage"); }
-  catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  // Managers need the user list too (checkout borrower, count/pick assignees,
+  // activity filter) — full user MANAGEMENT stays behind user:manage on POST/[id].
+  if (session.user.role !== "ADMIN" && session.user.role !== "MANAGER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const users = await prisma.user.findMany({
     select: { id: true, name: true, email: true, role: true, createdAt: true, image: true },

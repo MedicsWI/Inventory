@@ -97,17 +97,24 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 }
 
 async function collectDescendantIds(rootId: string): Promise<Set<string>> {
+  // One query for the whole table, walk in memory (was one query per node).
+  const all = await prisma.location.findMany({ select: { id: true, parentId: true } });
+  const childrenOf = new Map<string, string[]>();
+  for (const l of all) {
+    if (!l.parentId) continue;
+    const arr = childrenOf.get(l.parentId) ?? [];
+    arr.push(l.id);
+    childrenOf.set(l.parentId, arr);
+  }
   const out = new Set<string>();
   const stack = [rootId];
   while (stack.length) {
     const cur = stack.pop()!;
-    const kids = await prisma.location.findMany({
-      where: { parentId: cur },
-      select: { id: true },
-    });
-    for (const k of kids) {
-      out.add(k.id);
-      stack.push(k.id);
+    for (const kid of childrenOf.get(cur) ?? []) {
+      if (!out.has(kid)) {
+        out.add(kid);
+        stack.push(kid);
+      }
     }
   }
   return out;

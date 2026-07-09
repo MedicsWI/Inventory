@@ -188,8 +188,10 @@ function TableLite({
   const maxA = Math.max(...rows.map((r) => r.a), 1);
   return (
     <div className="space-y-1.5">
-      {rows.map((r) => (
-        <div key={r.label} className="text-sm">
+      {/* Index-suffixed key — category/location names aren't guaranteed unique
+          (e.g. "Uncategorized" vs a real category named the same). */}
+      {rows.map((r, i) => (
+        <div key={`${r.label}:${i}`} className="text-sm">
           <div className="flex items-center justify-between">
             <span className="truncate font-medium">{r.label}</span>
             <span className="text-xs text-muted-foreground">{r.a} {aLabel} · {r.b} {bLabel}</span>

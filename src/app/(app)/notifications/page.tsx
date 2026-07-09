@@ -53,23 +53,36 @@ export default function NotificationsPage() {
       const created = (r as { created: number }).created;
       toast.success(created ? `${created} new notifications` : "No new alerts");
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["notifications-unread-count"] });
     },
     onError: (e) => toast.error(String(e)),
   });
 
   const markRead = useMutation({
     mutationFn: (id: string) => api.patch(`/api/notifications/${id}`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+    },
+    onError: (e) => toast.error(String(e)),
   });
 
   const markAll = useMutation({
     mutationFn: () => api.post("/api/notifications/mark-all-read", {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+    },
+    onError: (e) => toast.error(String(e)),
   });
 
   const del = useMutation({
     mutationFn: (id: string) => api.del(`/api/notifications/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+    },
+    onError: (e) => toast.error(String(e)),
   });
 
   return (

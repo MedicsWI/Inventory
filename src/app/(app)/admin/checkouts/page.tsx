@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/dialog-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateOnly } from "@/lib/utils";
 
 type CheckoutRow = {
   id: string;
@@ -37,6 +37,10 @@ export default function AdminCheckoutsPage() {
     mutationFn: (id: string) => api.patch(`/api/checkouts/${id}`, {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["checkouts-admin"] });
+      qc.invalidateQueries({ queryKey: ["checkouts"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["item-checkouts"] });
       toast.success("Returned.");
     },
     onError: (e) => toast.error(String(e)),
@@ -46,6 +50,10 @@ export default function AdminCheckoutsPage() {
     mutationFn: (id: string) => api.del(`/api/checkouts/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["checkouts-admin"] });
+      qc.invalidateQueries({ queryKey: ["checkouts"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["item-checkouts"] });
       toast.success("Deleted.");
     },
     onError: (e) => toast.error(String(e)),
@@ -103,7 +111,7 @@ export default function AdminCheckoutsPage() {
                     <td className="py-2 pr-3">{c.quantity}</td>
                     <td className="py-2 pr-3">{c.user.name ?? c.user.email}</td>
                     <td className="py-2 pr-3">{formatDate(c.checkedOutAt)}</td>
-                    <td className="py-2 pr-3">{c.expectedReturnAt ? formatDate(c.expectedReturnAt) : "—"}</td>
+                    <td className="py-2 pr-3">{c.expectedReturnAt ? formatDateOnly(c.expectedReturnAt) : "—"}</td>
                     <td className="py-2 pr-3">
                       {c.returnedAt
                         ? <Badge variant="ok">Returned {formatDate(c.returnedAt)}</Badge>
@@ -164,7 +172,7 @@ export default function AdminCheckoutsPage() {
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Out {formatDate(c.checkedOutAt)}
-                  {c.expectedReturnAt && ` · expected ${formatDate(c.expectedReturnAt)}`}
+                  {c.expectedReturnAt && ` · expected ${formatDateOnly(c.expectedReturnAt)}`}
                   {c.returnedAt && ` · returned ${formatDate(c.returnedAt)}`}
                 </div>
                 <div className="flex gap-2 flex-wrap">

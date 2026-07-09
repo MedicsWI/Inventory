@@ -10,6 +10,7 @@ type Detail = {
   name: string;
   description: string | null;
   items: { itemId: string; quantity: number; notes: string | null }[];
+  updatedAt?: string;
 };
 
 export default function EditTemplatePage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +18,9 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
   const { data, isLoading } = useQuery({
     queryKey: ["pl-template", id],
     queryFn: () => api.get<Detail>(`/api/pick-list-templates/${id}`),
+    // Never seed the form from a stale cached copy.
+    refetchOnMount: "always",
+    staleTime: 0,
   });
 
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>;
@@ -32,5 +36,5 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
       notes: it.notes ?? "",
     })),
   };
-  return <PickListTemplateForm mode="edit" initial={initial} />;
+  return <PickListTemplateForm key={data.updatedAt ?? data.id} mode="edit" initial={initial} />;
 }

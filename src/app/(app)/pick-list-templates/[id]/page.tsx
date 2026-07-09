@@ -3,9 +3,11 @@
 import { use } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { ChevronLeft, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/dialog-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +23,7 @@ export default function TemplateDetailPage({ params }: { params: Promise<{ id: s
   const { id } = use(params);
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const { data: session } = useSession();
   const { data, isLoading } = useQuery({
     queryKey: ["pl-template", id],
     queryFn: () => api.get<Detail>(`/api/pick-list-templates/${id}`),
@@ -80,22 +83,25 @@ export default function TemplateDetailPage({ params }: { params: Promise<{ id: s
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
-        <Button
-          variant="destructive"
-          onClick={async () => {
-            const ok = await confirm({
-              title: "Delete template?",
-              description: "Future pick lists won't be able to use this template. Existing pick lists that were spawned from it are unaffected.",
-              confirmText: "Delete template",
-              variant: "destructive",
-            });
-            if (ok) del.mutate();
-          }}
-        >
-          <Trash2 className="h-4 w-4" /> Delete
-        </Button>
-      </div>
+      {can(session?.user.role, "location:delete") && (
+        <div className="flex justify-end">
+          <Button
+            variant="destructive"
+            disabled={del.isPending}
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Delete template?",
+                description: "Future pick lists won't be able to use this template. Existing pick lists that were spawned from it are unaffected.",
+                confirmText: "Delete template",
+                variant: "destructive",
+              });
+              if (ok) del.mutate();
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

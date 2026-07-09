@@ -10,12 +10,18 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function POST(_req: Request, ctx: Ctx) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  try { assertCan(session.user.role, "location:update"); }
-  catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const { id } = await ctx.params;
   const count = await prisma.stockCount.findUnique({ where: { id } });
   if (!count) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Managers can start any count; the assigned medic can start their own
+  // (otherwise counts assigned to medics stall until a manager presses Start).
+  const isAssignee = count.assignedToId === session.user.id;
+  if (!isAssignee) {
+    try { assertCan(session.user.role, "location:update"); }
+    catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
+  }
   if (count.status !== "DRAFT") {
     return NextResponse.json({ error: `Count is ${count.status}, can only start a DRAFT.` }, { status: 400 });
   }

@@ -65,8 +65,10 @@ export function PickListTemplateForm({
     },
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["pl-templates"] });
-      toast.success(mode === "create" ? "Template created." : "Saved.");
       const id = (r as { id?: string })?.id ?? initial?.id;
+      // Detail page reads ["pl-template", id] — invalidate or it shows pre-save data.
+      if (id) qc.invalidateQueries({ queryKey: ["pl-template", id] });
+      toast.success(mode === "create" ? "Template created." : "Saved.");
       router.push(id ? `/pick-list-templates/${id}` : "/pick-list-templates");
     },
     onError: (e) => toast.error(String(e)),
@@ -110,7 +112,7 @@ export function PickListTemplateForm({
               <div className="col-span-4 sm:col-span-2 space-y-1">
                 <Label className="text-xs">Qty</Label>
                 <Input type="number" min={1} value={line.quantity}
-                  onChange={(e) => updateLine(i, { quantity: Number(e.target.value) || 1 })} />
+                  onChange={(e) => updateLine(i, { quantity: Math.max(1, Math.floor(Number(e.target.value)) || 1) })} />
               </div>
               <div className="col-span-7 sm:col-span-2 space-y-1">
                 <Label className="text-xs">Notes</Label>

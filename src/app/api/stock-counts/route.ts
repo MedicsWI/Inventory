@@ -17,11 +17,13 @@ export async function GET(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const status = searchParams.get("status") || undefined;
+  const STATUSES = ["DRAFT", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELED"] as const;
+  const statusRaw = searchParams.get("status")?.toUpperCase();
+  const status = STATUSES.find((s) => s === statusRaw); // bogus values ignored, not 500
   const mineOnly = searchParams.get("mine") === "1";
 
   const where: Parameters<typeof prisma.stockCount.findMany>[0] = { where: {} };
-  if (status) where.where = { ...where.where, status: status as "DRAFT" | "IN_PROGRESS" | "REVIEW" | "COMPLETED" | "CANCELED" };
+  if (status) where.where = { ...where.where, status };
   if (mineOnly || session.user.role === "MEDIC") {
     where.where = { ...where.where, assignedToId: session.user.id };
   }

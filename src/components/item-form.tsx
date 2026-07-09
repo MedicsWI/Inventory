@@ -86,6 +86,7 @@ export function ItemForm({ initial, mode }: { initial?: ItemFormValue; mode: "cr
   const locs = useQuery({ queryKey: ["locs-flat"], queryFn: () => api.get<Lookup>("/api/locations") });
   const tags = useQuery({ queryKey: ["tags"], queryFn: () => api.get<{ id: string; name: string; color: string | null }[]>("/api/tags") });
   const [newTagName, setNewTagName] = useState("");
+  const [addingTag, setAddingTag] = useState(false);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [showNewLocation, setShowNewLocation] = useState(false);
 
@@ -296,13 +297,21 @@ export function ItemForm({ initial, mode }: { initial?: ItemFormValue; mode: "cr
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={addingTag}
                     onClick={async () => {
                       const trimmed = newTagName.trim();
-                      if (!trimmed) return;
-                      const created = await api.post<{ id: string; name: string }>("/api/tags", { name: trimmed });
-                      setNewTagName("");
-                      setForm({ ...form, tagIds: [...form.tagIds, created.id] });
-                      tags.refetch();
+                      if (!trimmed || addingTag) return;
+                      setAddingTag(true);
+                      try {
+                        const created = await api.post<{ id: string; name: string }>("/api/tags", { name: trimmed });
+                        setNewTagName("");
+                        setForm({ ...form, tagIds: [...form.tagIds, created.id] });
+                        tags.refetch();
+                      } catch (e) {
+                        toast.error(String(e));
+                      } finally {
+                        setAddingTag(false);
+                      }
                     }}
                   >
                     Add tag

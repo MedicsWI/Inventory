@@ -100,18 +100,24 @@ function buildCandidates(raw: string): { productNdcCandidates: string[]; package
   };
 }
 
-async function searchOpenFda(field: "product_ndc" | "package_ndc", value: string): Promise<FdaProduct | null> {
+// "miss" = openFDA answered and has no such NDC; "upstream" = openFDA is
+// down/rate-limited — must NOT be reported to the user as "drug not found".
+type FdaLookup = { hit: FdaProduct | null; upstream: boolean };
+
+async function searchOpenFda(field: "product_ndc" | "package_ndc", value: string): Promise<FdaLookup> {
   const url = `https://api.fda.gov/drug/ndc.json?search=${field}:"${encodeURIComponent(value)}"&limit=1`;
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
       next: { revalidate: 86400 },
+      signal: AbortSignal.timeout(4_000),
     });
-    if (!res.ok) return null;
+    if (res.status === 404) return { hit: null, upstream: false }; // openFDA's "no match"
+    if (!res.ok) return { hit: null, upstream: true };             // 429 / 5xx
     const data = (await res.json()) as FdaResponse;
-    return data.results?.[0] ?? null;
+    return { hit: data.results?.[0] ?? null, upstream: false };
   } catch {
-    return null;
+    return { hit: null, upstream: true }; // network error / timeout
   }
 }
 
@@ -128,21 +134,31 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   let hit: FdaProduct | null = null;
   let matchedAs = code;
+  let sawUpstreamError = false;
 
   // Package-level matches are more specific; try them first.
   for (const candidate of packageNdcCandidates) {
-    hit = await searchOpenFda("package_ndc", candidate);
-    if (hit) { matchedAs = candidate; break; }
+    const r = await searchOpenFda("package_ndc", candidate);
+    if (r.upstream) sawUpstreamError = true;
+    if (r.hit) { hit = r.hit; matchedAs = candidate; break; }
   }
   // Fall back to product_ndc
   if (!hit) {
     for (const candidate of productNdcCandidates) {
-      hit = await searchOpenFda("product_ndc", candidate);
-      if (hit) { matchedAs = candidate; break; }
+      const r = await searchOpenFda("product_ndc", candidate);
+      if (r.upstream) sawUpstreamError = true;
+      if (r.hit) { hit = r.hit; matchedAs = candidate; break; }
     }
   }
 
   if (!hit) {
+    // If any candidate lookup failed upstream, this is NOT a confirmed miss.
+    if (sawUpstreamError) {
+      return NextResponse.json(
+        { error: "Drug database (openFDA) is unavailable right now — try again shortly." },
+        { status: 502 },
+      );
+    }
     return NextResponse.json(
       { found: false, code, tried: { productNdcCandidates, packageNdcCandidates } },
       { status: 404 },

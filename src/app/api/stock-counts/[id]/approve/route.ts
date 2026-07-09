@@ -30,6 +30,10 @@ export async function POST(_req: Request, ctx: Ctx) {
   }
 
   const discrepancies = count.lines.filter((l) => l.actualQty != null && l.actualQty !== l.expectedQty);
+  // Record what actually happened per line so the audit log reflects reality
+  // (clamps and moved-item skips included), not just the count sheet.
+  const applied: { itemId: string; prevQty: number; newQty: number; delta: number }[] = [];
+  const skippedMoved: string[] = [];
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -52,13 +56,21 @@ export async function POST(_req: Request, ctx: Ctx) {
         const delta = line.actualQty - line.expectedQty;
         const cur = await tx.item.findUnique({
           where: { id: line.itemId },
-          select: { quantity: true },
+          select: { quantity: true, locationId: true },
         });
         if (!cur) continue;
+        // Item moved out of the counted location since start → this count no
+        // longer describes it; don't adjust global stock from a stale scope.
+        if (count.locationId && cur.locationId !== count.locationId) {
+          skippedMoved.push(line.itemId);
+          continue;
+        }
+        const newQty = Math.max(0, cur.quantity + delta);
         await tx.item.update({
           where: { id: line.itemId },
-          data: { quantity: Math.max(0, cur.quantity + delta) },
+          data: { quantity: newQty },
         });
+        applied.push({ itemId: line.itemId, prevQty: cur.quantity, newQty, delta: newQty - cur.quantity });
       }
     });
   } catch (e) {
@@ -68,20 +80,20 @@ export async function POST(_req: Request, ctx: Ctx) {
     );
   }
 
-  // Per-item audit entry so item history shows the stock-count source.
-  for (const line of discrepancies) {
+  // Per-item audit entry with the REAL before/after quantities.
+  for (const a of applied) {
     await logActivity({
       userId: session.user.id,
       action: "ADJUST_QTY",
       entityType: "ITEM",
-      entityId: line.itemId,
-      before: { quantity: line.expectedQty },
-      after: { quantity: line.actualQty },
+      entityId: a.itemId,
+      before: { quantity: a.prevQty },
+      after: { quantity: a.newQty },
       metadata: {
         source: "STOCK_COUNT",
         stockCountId: id,
         stockCountName: count.name,
-        delta: (line.actualQty ?? 0) - line.expectedQty,
+        delta: a.delta,
       },
     });
   }
@@ -95,9 +107,10 @@ export async function POST(_req: Request, ctx: Ctx) {
       totalLines: count.lines.length,
       discrepancies: discrepancies.length,
       uncounted: count.lines.filter((l) => l.actualQty == null).length,
+      skippedMovedItems: skippedMoved.length || undefined,
       countName: count.name,
     },
   });
 
-  return NextResponse.json({ ok: true, applied: discrepancies.length });
+  return NextResponse.json({ ok: true, applied: applied.length, skippedMoved: skippedMoved.length });
 }

@@ -14,6 +14,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+// User-supplied strings go into document.write() HTML below — escape them so a
+// label ID like `<img onerror=...>` can't inject markup into the print window.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function LabelsPage() {
   const [raw, setRaw] = useState("");
   const [labelTitle, setLabelTitle] = useState("");
@@ -27,7 +38,8 @@ export default function LabelsPage() {
   }
 
   function handleGenerate() {
-    const ids = parseInput();
+    // Dedupe — repeated IDs would render duplicate React keys and duplicate labels.
+    const ids = Array.from(new Set(parseInput()));
     if (ids.length === 0) return;
     setGenerated(ids);
   }
@@ -69,9 +81,9 @@ export default function LabelsPage() {
           <div class="grid">
             ${cards.map((c) => `
               <div class="label">
-                <img src="${c.dataUrl}" alt="${c.id}" />
-                <div class="id">${c.id}</div>
-                ${labelTitle ? `<div class="title">${labelTitle}</div>` : ""}
+                <img src="${c.dataUrl}" alt="${escapeHtml(c.id)}" />
+                <div class="id">${escapeHtml(c.id)}</div>
+                ${labelTitle ? `<div class="title">${escapeHtml(labelTitle)}</div>` : ""}
               </div>
             `).join("")}
           </div>

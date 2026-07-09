@@ -60,6 +60,7 @@ export async function sendSms(opts: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: params,
+        signal: AbortSignal.timeout(10_000),
       },
     );
     if (res.ok) {

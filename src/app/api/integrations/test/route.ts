@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     });
     if (!me?.phone) {
       return NextResponse.json(
-        { ok: false, error: "No phone number on your profile. Add one at /account/alerts." },
+        { ok: false, error: "No phone number on your profile. Add one under Alert preferences on the Notifications page." },
         { status: 400 },
       );
     }

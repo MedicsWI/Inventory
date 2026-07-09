@@ -7,9 +7,10 @@ import { CheckCircle2, PackageOpen, Clock, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
+import { usePrompt } from "@/components/dialog-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateOnly } from "@/lib/utils";
 
 type CheckoutRow = {
   id: string;
@@ -24,6 +25,7 @@ type CheckoutRow = {
 
 export default function MyCheckoutsPage() {
   const qc = useQueryClient();
+  const prompt = usePrompt();
   const { data: session } = useSession();
   const isAdmin = session?.user.role === "ADMIN" || session?.user.role === "MANAGER";
   const active = useQuery({
@@ -36,7 +38,8 @@ export default function MyCheckoutsPage() {
   });
 
   const ret = useMutation({
-    mutationFn: (id: string) => api.patch(`/api/checkouts/${id}`, {}),
+    mutationFn: ({ id, returnQty }: { id: string; returnQty?: number }) =>
+      api.patch(`/api/checkouts/${id}`, returnQty != null ? { returnQty } : {}),
     onSuccess: () => {
       toast.success("Returned.");
       qc.invalidateQueries({ queryKey: ["checkouts"] });
@@ -44,6 +47,32 @@ export default function MyCheckoutsPage() {
     },
     onError: (e) => toast.error(String(e)),
   });
+
+  async function handleReturn(c: CheckoutRow) {
+    if (c.quantity <= 1) {
+      ret.mutate({ id: c.id });
+      return;
+    }
+    const answer = await prompt({
+      title: "Return items",
+      description: `How many to return? (1–${c.quantity})`,
+      label: "Quantity",
+      type: "number",
+      initialValue: String(c.quantity),
+      confirmText: "Return",
+      validate: (v) => {
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < 1 || n > c.quantity) {
+          return `Enter a whole number between 1 and ${c.quantity}.`;
+        }
+        return null;
+      },
+    });
+    if (answer === null) return;
+    const n = parseInt(answer, 10);
+    // Returning everything = plain full return; anything less is a partial return.
+    ret.mutate(n >= c.quantity ? { id: c.id } : { id: c.id, returnQty: n });
+  }
 
   function overdue(row: CheckoutRow): boolean {
     return !!row.expectedReturnAt && new Date(row.expectedReturnAt) < new Date() && !row.returnedAt;
@@ -84,11 +113,11 @@ export default function MyCheckoutsPage() {
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Out since {formatDate(c.checkedOutAt)}
-                  {c.expectedReturnAt && <> · expected {formatDate(c.expectedReturnAt)}</>}
+                  {c.expectedReturnAt && <> · expected {formatDateOnly(c.expectedReturnAt)}</>}
                 </div>
                 {c.notes && <div className="text-xs mt-1">{c.notes}</div>}
               </div>
-              <Button size="sm" onClick={() => ret.mutate(c.id)} disabled={ret.isPending}>
+              <Button size="sm" onClick={() => handleReturn(c)} disabled={ret.isPending}>
                 <CheckCircle2 className="h-4 w-4" /> Return
               </Button>
             </div>

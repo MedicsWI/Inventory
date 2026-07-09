@@ -33,6 +33,16 @@ export async function POST(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "SMTP not configured. See /admin/integrations." }, { status: 503 });
   }
 
+  // Claim the order BEFORE emailing — two concurrent sends (double-click,
+  // retry) must not both email the vendor. Loser of the race gets a 409.
+  const claim = await prisma.incomingOrder.updateMany({
+    where: { id, status: "DRAFT" },
+    data: { status: "ORDERED", sentAt: new Date() },
+  });
+  if (claim.count === 0) {
+    return NextResponse.json({ error: "Order was already sent." }, { status: 409 });
+  }
+
   // Build the email
   const subjectPoNum = order.orderNumber ? ` ${order.orderNumber}` : "";
   const subject = `Purchase Order${subjectPoNum} — Medics Wisconsin`;
@@ -160,14 +170,15 @@ export async function POST(_req: Request, ctx: Ctx) {
     text,
   });
   if (!sendResult.ok) {
+    // Email failed — release the claim so the user can fix the issue and retry.
+    await prisma.incomingOrder.updateMany({
+      where: { id, status: "ORDERED" },
+      data: { status: "DRAFT", sentAt: null },
+    });
     return NextResponse.json({ error: sendResult.error ?? "Send failed" }, { status: 502 });
   }
 
-  // Flip DRAFT → ORDERED and stamp sentAt
-  const updated = await prisma.incomingOrder.update({
-    where: { id },
-    data: { status: "ORDERED", sentAt: new Date() },
-  });
+  const updated = await prisma.incomingOrder.findUnique({ where: { id } });
 
   await logActivity({
     userId: session.user.id,

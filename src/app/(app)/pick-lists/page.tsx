@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { Plus, ListChecks, Settings } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +32,7 @@ const statusVariant: Record<Row["status"], "outline" | "warn" | "ok" | "danger">
 };
 
 export default function PickListsPage() {
+  const { data: session } = useSession();
   const { data, isLoading } = useQuery({
     queryKey: ["pick-lists"],
     queryFn: () => api.get<Row[]>("/api/pick-lists"),
@@ -50,9 +53,11 @@ export default function PickListsPage() {
           <Button asChild variant="outline">
             <Link href="/pick-list-templates"><Settings className="h-4 w-4" /> Templates</Link>
           </Button>
-          <Button asChild>
-            <Link href="/pick-lists/new"><Plus className="h-4 w-4" /> New pick list</Link>
-          </Button>
+          {can(session?.user.role, "location:create") && (
+            <Button asChild>
+              <Link href="/pick-lists/new"><Plus className="h-4 w-4" /> New pick list</Link>
+            </Button>
+          )}
         </div>
       </header>
 

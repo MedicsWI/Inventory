@@ -60,6 +60,7 @@ export function CheckoutDialog({
     onSuccess: () => {
       toast.success("Checked out.");
       qc.invalidateQueries({ queryKey: ["item", itemId] });
+      qc.invalidateQueries({ queryKey: ["item-checkouts", itemId] });
       qc.invalidateQueries({ queryKey: ["checkouts"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       onDone?.();

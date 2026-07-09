@@ -28,7 +28,7 @@ export function downloadPdfReport(opts: PdfReportOptions) {
   // Header
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text("Family Care of the Fox Cities — Medics WI Inventory", 40, 40);
+  doc.text("Medics Wisconsin — Inventory", 40, 40);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
@@ -53,12 +53,13 @@ export function downloadPdfReport(opts: PdfReportOptions) {
     alternateRowStyles: { fillColor: [245, 248, 252] },
     margin: { left: 40, right: 40 },
     didDrawPage: (data) => {
-      const pageCount = doc.getNumberOfPages();
+      // getNumberOfPages() inside didDrawPage is the RUNNING count ("1 of 1,
+      // 2 of 2"). Use jsPDF's total-pages placeholder and resolve it at the end.
       const pageNum = data.pageNumber;
       doc.setFontSize(8);
       doc.setTextColor(120);
       doc.text(
-        `Page ${pageNum} of ${pageCount}`,
+        `Page ${pageNum} of {totalPages}`,
         pageWidth / 2,
         doc.internal.pageSize.getHeight() - 20,
         { align: "center" },
@@ -71,6 +72,11 @@ export function downloadPdfReport(opts: PdfReportOptions) {
       doc.setTextColor(0);
     },
   });
+
+  // Resolve the {totalPages} placeholder now that all pages exist.
+  if (typeof doc.putTotalPages === "function") {
+    doc.putTotalPages("{totalPages}");
+  }
 
   doc.save(opts.filename);
 }

@@ -3,7 +3,6 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install --legacy-peer-deps",
   "crons": [
-    { "path": "/api/notifications/check", "schedule": "0 13 * * *" },
-    { "path": "/api/volunteers/missing-data-alert", "schedule": "0 14 * * *" }
+    { "path": "/api/notifications/check", "schedule": "0 13 * * *" }
   ]
 }

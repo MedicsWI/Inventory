@@ -2,19 +2,21 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { Plus, Truck, ExternalLink } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateOnly } from "@/lib/utils";
 
 type Row = {
   id: string;
   vendor: string;
   orderNumber: string | null;
   trackingUrl: string | null;
-  status: "ORDERED" | "SHIPPED" | "PARTIAL" | "RECEIVED" | "CANCELED";
+  status: "DRAFT" | "ORDERED" | "SHIPPED" | "PARTIAL" | "RECEIVED" | "CANCELED";
   orderedAt: string;
   expectedAt: string | null;
   receivedAt: string | null;
@@ -22,6 +24,7 @@ type Row = {
 };
 
 const statusVariant: Record<Row["status"], "outline" | "secondary" | "warn" | "ok" | "danger"> = {
+  DRAFT: "outline",
   ORDERED: "outline",
   SHIPPED: "secondary",
   PARTIAL: "warn",
@@ -30,6 +33,7 @@ const statusVariant: Record<Row["status"], "outline" | "secondary" | "warn" | "o
 };
 
 export default function OrdersPage() {
+  const { data: session } = useSession();
   const { data, isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: () => api.get<Row[]>("/api/orders"),
@@ -46,9 +50,11 @@ export default function OrdersPage() {
             Track vendor orders. Receiving against an order auto-adds stock.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/orders/new"><Plus className="h-4 w-4" /> New order</Link>
-        </Button>
+        {can(session?.user.role, "import:bulk") && (
+          <Button asChild>
+            <Link href="/orders/new"><Plus className="h-4 w-4" /> New order</Link>
+          </Button>
+        )}
       </header>
 
       <Card>
@@ -77,7 +83,7 @@ export default function OrdersPage() {
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   Ordered {formatDate(o.orderedAt)}
-                  {o.expectedAt && ` · expected ${formatDate(o.expectedAt)}`}
+                  {o.expectedAt && ` · expected ${formatDateOnly(o.expectedAt)}`}
                   {o.receivedAt && ` · received ${formatDate(o.receivedAt)}`}
                   {` · ${o._count.lines} line${o._count.lines === 1 ? "" : "s"}`}
                 </div>

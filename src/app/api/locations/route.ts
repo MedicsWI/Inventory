@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertCan } from "@/lib/permissions";
 import { logActivity } from "@/lib/activity";
+import { prismaErrorResponse } from "@/lib/api-errors";
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -56,11 +57,18 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const created = await prisma.location.create({ data: parsed.data });
+  let created;
+  try {
+    created = await prisma.location.create({ data: parsed.data });
+  } catch (e) {
+    const r = prismaErrorResponse(e); // duplicate barcode → 409
+    if (r) return r;
+    throw e;
+  }
   await logActivity({
     userId: session.user.id,
     action: "CREATE",

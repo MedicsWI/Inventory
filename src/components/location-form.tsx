@@ -48,15 +48,32 @@ export function LocationForm({ initial, mode }: { initial?: LocationFormValue; m
         barcode: form.barcode || null,
         notes: form.notes || null,
       };
-      return mode === "create"
-        ? api.post(`/api/locations`, payload)
-        : api.patch(`/api/locations/${initial!.id}`, payload);
+      if (mode === "create") return api.post(`/api/locations`, payload);
+
+      // Edit: diff against the seeded values — a form seeded from a cached
+      // read must not clobber fields that changed since it loaded.
+      const base = initial!;
+      const basePayload = {
+        name: base.name,
+        type: base.type,
+        parentId: base.parentId || null,
+        barcode: base.barcode || null,
+        notes: base.notes || null,
+      };
+      const diff: Record<string, unknown> = {};
+      for (const key of Object.keys(payload) as (keyof typeof payload)[]) {
+        if (payload[key] !== basePayload[key]) diff[key] = payload[key];
+      }
+      if (Object.keys(diff).length === 0) return Promise.resolve({ id: base.id });
+      return api.patch(`/api/locations/${base.id}`, diff);
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["locations-tree"] });
       qc.invalidateQueries({ queryKey: ["locs-flat"] });
-      toast.success(mode === "create" ? "Location created." : "Saved.");
       const id = (data as { id?: string })?.id ?? initial?.id;
+      // The detail page reads ["location", id] — without this it shows pre-save data.
+      if (id) qc.invalidateQueries({ queryKey: ["location", id] });
+      toast.success(mode === "create" ? "Location created." : "Saved.");
       router.push(id ? `/locations/${id}` : "/locations");
     },
     onError: (e) => toast.error(String(e)),

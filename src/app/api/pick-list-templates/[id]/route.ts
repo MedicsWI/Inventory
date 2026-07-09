@@ -59,6 +59,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
           quantity: it.quantity,
           notes: it.notes ?? null,
         })),
+        skipDuplicates: true, // duplicate itemId rows would P2002 → unhandled 500
       });
       if (Object.keys(meta).length) {
         await tx.pickListTemplate.update({ where: { id }, data: meta });

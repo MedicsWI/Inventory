@@ -7,6 +7,17 @@ import bwipjs from "bwip-js";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
 
+// Values are interpolated into document.write() HTML below — escape them so an
+// item name/barcode containing markup can't inject into the print window.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function BarcodeLabel({
   value,
   title,
@@ -55,10 +66,10 @@ export function BarcodeLabel({
           </style>
         </head>
         <body>
-          <img src="${dataUrl}" alt="${value}" />
-          ${title ? `<h3>${title}</h3>` : ""}
-          ${subtitle ? `<p>${subtitle}</p>` : ""}
-          <p>${value}</p>
+          <img src="${dataUrl}" alt="${escapeHtml(value)}" />
+          ${title ? `<h3>${escapeHtml(title)}</h3>` : ""}
+          ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ""}
+          <p>${escapeHtml(value)}</p>
           <script>window.onload = () => window.print();</script>
         </body>
       </html>

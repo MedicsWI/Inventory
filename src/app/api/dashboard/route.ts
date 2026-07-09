@@ -28,8 +28,10 @@ export async function GET() {
     (i) => i.lowStockThreshold != null && i.quantity <= i.lowStockThreshold,
   ).length;
 
+  // Same window as the count above — long-expired items were appearing in the
+  // "expiring soon" sample while being excluded from the badge count.
   const expiringItems = await prisma.item.findMany({
-    where: { expirationDate: { lte: in30 } },
+    where: { expirationDate: { lte: in30, gte: now } },
     orderBy: { expirationDate: "asc" },
     take: 10,
     include: { location: { select: { id: true, name: true } }, category: true },

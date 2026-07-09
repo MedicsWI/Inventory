@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { Plus, Search, CheckSquare, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ItemCard, type ItemCardData } from "@/components/item-card";
@@ -99,9 +100,11 @@ export default function ItemsPage() {
               <CheckSquare className="h-4 w-4" /> {selectMode ? "Done selecting" : "Bulk edit"}
             </Button>
           )}
-          <Button asChild>
-            <Link href="/items/new"><Plus className="h-4 w-4" /> Add item</Link>
-          </Button>
+          {can(session?.user.role, "item:create") && (
+            <Button asChild>
+              <Link href="/items/new"><Plus className="h-4 w-4" /> Add item</Link>
+            </Button>
+          )}
         </div>
       </header>
 

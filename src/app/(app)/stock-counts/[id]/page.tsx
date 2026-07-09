@@ -64,18 +64,27 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
 
   const start = useMutation({
     mutationFn: () => api.post(`/api/stock-counts/${id}/start`, {}),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["stock-count", id] }); toast.success("Count started."); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stock-count", id] });
+      qc.invalidateQueries({ queryKey: ["stock-counts"] });
+      toast.success("Count started.");
+    },
     onError: (e) => toast.error(String(e)),
   });
   const submit = useMutation({
     mutationFn: () => api.post(`/api/stock-counts/${id}/submit`, {}),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["stock-count", id] }); toast.success("Submitted for review."); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stock-count", id] });
+      qc.invalidateQueries({ queryKey: ["stock-counts"] });
+      toast.success("Submitted for review.");
+    },
     onError: (e) => toast.error(String(e)),
   });
   const approve = useMutation({
     mutationFn: () => api.post(`/api/stock-counts/${id}/approve`, {}),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["stock-count", id] });
+      qc.invalidateQueries({ queryKey: ["stock-counts"] });
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
@@ -89,6 +98,7 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
     mutationFn: (reason?: string) => api.post(`/api/stock-counts/${id}/reject`, { reason }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["stock-count", id] });
+      qc.invalidateQueries({ queryKey: ["stock-counts"] });
       toast.success("Sent back to IN_PROGRESS for recount.");
     },
     onError: (e) => toast.error(String(e)),
@@ -141,7 +151,7 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         <div className="flex gap-2 flex-wrap">
-          {data.status === "DRAFT" && isAdmin && (
+          {data.status === "DRAFT" && (isAdmin || (!!session?.user.id && data.assignedTo?.id === session.user.id)) && (
             <Button onClick={() => start.mutate()} disabled={start.isPending}>
               <Play className="h-4 w-4" /> Start count
             </Button>
@@ -257,7 +267,8 @@ export default function StockCountDetailPage({ params }: { params: Promise<{ id:
               )}
               {filtered.map((line) => (
                 <CountLineRow
-                  key={line.id}
+                  // actualQty in the key re-seeds the row's local input when the server value changes
+                  key={`${line.id}:${line.actualQty ?? ""}`}
                   line={line}
                   readOnly={data.status !== "IN_PROGRESS"}
                   onSet={(qty) => recordLine.mutate({ lineId: line.id, actualQty: qty })}

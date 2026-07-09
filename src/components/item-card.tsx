@@ -35,15 +35,16 @@ export function ItemCard({
     item.lowStockThreshold != null && item.quantity <= item.lowStockThreshold;
 
   const adjust = useMutation({
+    // Atomic server-side delta — an absolute value computed from possibly-stale
+    // card data overwrote other users' concurrent adjustments.
     mutationFn: (delta: number) =>
-      api.patch(`/api/items/${item.id}`, {
-        quantity: Math.max(0, item.quantity + delta),
-      }),
+      api.patch(`/api/items/${item.id}`, { quantityDelta: delta }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.invalidateQueries({ queryKey: ["item", item.id] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["low-stock"] });
+      qc.invalidateQueries({ queryKey: ["expiring"] });
     },
     onError: (e) => toast.error(String(e)),
   });

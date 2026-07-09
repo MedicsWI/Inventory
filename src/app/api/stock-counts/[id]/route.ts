@@ -47,9 +47,24 @@ export async function PATCH(req: Request, ctx: Ctx) {
   catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
 
   const { id } = await ctx.params;
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+
+  const existing = await prisma.stockCount.findUnique({ where: { id }, select: { status: true } });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // A COMPLETED count is an applied inventory adjustment — its record is
+  // frozen. Re-scoping the location after start would desync lines from scope.
+  if (existing.status === "COMPLETED" || existing.status === "CANCELED") {
+    return NextResponse.json({ error: `A ${existing.status} count can't be edited.` }, { status: 409 });
+  }
+  if (parsed.data.locationId !== undefined && existing.status !== "DRAFT") {
+    return NextResponse.json(
+      { error: "Location scope can only change while the count is a DRAFT (lines snapshot at start)." },
+      { status: 409 },
+    );
+  }
 
   const updated = await prisma.stockCount.update({ where: { id }, data: parsed.data });
   return NextResponse.json(updated);
@@ -61,6 +76,16 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   try { assertCan(session.user.role, "location:delete"); }
   catch { return NextResponse.json({ error: "Forbidden" }, { status: 403 }); }
   const { id } = await ctx.params;
+  const existing = await prisma.stockCount.findUnique({ where: { id }, select: { status: true } });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // COMPLETED counts back real stock adjustments — deleting one erases the
+  // audit trail behind quantity changes.
+  if (existing.status === "COMPLETED") {
+    return NextResponse.json(
+      { error: "Completed counts can't be deleted — their adjustments were applied to stock." },
+      { status: 409 },
+    );
+  }
   await prisma.stockCount.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

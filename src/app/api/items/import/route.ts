@@ -12,13 +12,13 @@ import { logActivity } from "@/lib/activity";
 
 const rowSchema = z.object({
   name: z.string().min(1).max(200),
-  barcode: z.string().optional().nullable(),
-  sku: z.string().optional().nullable(),
-  quantity: z.coerce.number().int().nonnegative().default(0),
-  unit: z.string().optional().nullable(),
-  lotNumber: z.string().optional().nullable(),
+  barcode: z.string().max(200).optional().nullable(),
+  sku: z.string().max(120).optional().nullable(),
+  quantity: z.coerce.number().int().nonnegative().max(1_000_000).default(0),
+  unit: z.string().max(40).optional().nullable(),
+  lotNumber: z.string().max(120).optional().nullable(),
   expirationDate: z.string().optional().nullable(),    // YYYY-MM-DD or empty
-  lowStockThreshold: z.union([z.coerce.number().int().nonnegative(), z.literal("")]).optional().nullable(),
+  lowStockThreshold: z.union([z.coerce.number().int().nonnegative().max(1_000_000), z.literal("")]).optional().nullable(),
   locationName: z.string().optional().nullable(),
   categoryName: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -122,14 +122,33 @@ export async function POST(req: Request) {
 
     try {
       if (r.barcode) {
+        // Update must only touch columns present in THIS row — re-importing a
+        // quantity-only CSV must not null out location/category/lot/expiration/
+        // notes on existing items.
+        const update: Record<string, unknown> = { name: r.name, quantity: r.quantity };
+        if (r.sku) update.sku = r.sku;
+        if (r.unit) update.unit = r.unit;
+        if (r.lotNumber) update.lotNumber = r.lotNumber;
+        if (r.expirationDate) update.expirationDate = expirationDate;
+        if (r.lowStockThreshold !== undefined && r.lowStockThreshold !== null && r.lowStockThreshold !== "") {
+          update.lowStockThreshold = Number(r.lowStockThreshold);
+        }
+        if (r.notes) update.notes = r.notes;
+        if (r.locationName) update.locationId = locationId;
+        if (r.categoryName) update.categoryId = categoryId;
+
+        const existing = await prisma.item.findUnique({
+          where: { barcode: r.barcode },
+          select: { id: true },
+        });
         const upserted = await prisma.item.upsert({
           where: { barcode: r.barcode },
           create: data,
-          update: data,
+          update,
         });
         results.push({
           index: i,
-          status: "updated",
+          status: existing ? "updated" : "created",
           id: upserted.id,
           name: upserted.name,
         });

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Search, Download, Filter, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api-client";
@@ -53,26 +54,32 @@ export default function ActivityPage() {
   const [rangeDays, setRangeDays] = useState<number | null>(30);
   const [skip, setSkip] = useState(0);
 
-  const params = new URLSearchParams();
-  params.set("take", String(PAGE_SIZE));
-  params.set("skip", String(skip));
-  if (q.trim()) params.set("q", q.trim());
-  if (userId) params.set("userId", userId);
-  if (entityType) params.set("entityType", entityType);
-  if (action) params.set("action", action);
-  if (rangeDays !== null) {
-    const since = new Date(Date.now() - rangeDays * 86400000).toISOString();
-    params.set("since", since);
-  }
-
+  // IMPORTANT: `since` must NOT be computed in render with Date.now() — a
+  // ms-precision value in the queryKey made every render a brand-new query
+  // (render → fetch → re-render → new key → fetch, forever).
   const { data, isLoading } = useQuery({
-    queryKey: ["activity", params.toString()],
-    queryFn: () => api.get<Page>(`/api/activity?${params.toString()}`),
+    queryKey: ["activity", { skip, q: q.trim(), userId, entityType, action, rangeDays }],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      params.set("take", String(PAGE_SIZE));
+      params.set("skip", String(skip));
+      if (q.trim()) params.set("q", q.trim());
+      if (userId) params.set("userId", userId);
+      if (entityType) params.set("entityType", entityType);
+      if (action) params.set("action", action);
+      if (rangeDays !== null) {
+        params.set("since", new Date(Date.now() - rangeDays * 86400000).toISOString());
+      }
+      return api.get<Page>(`/api/activity?${params.toString()}`);
+    },
   });
 
+  const { data: session } = useSession();
+  const canListUsers = session?.user.role === "ADMIN" || session?.user.role === "MANAGER";
   const users = useQuery({
     queryKey: ["users-for-filter"],
     queryFn: () => api.get<UserLite[]>("/api/users"),
+    enabled: canListUsers, // MEDICs get a 403 — don't fetch a filter they can't use
   });
 
   function entityHref(row: LogRow): string | null {
@@ -87,9 +94,14 @@ export default function ActivityPage() {
 
   function exportCsv() {
     // Pull a CSV version of the current filter set (excluding pagination — server caps at 50k).
-    const csvParams = new URLSearchParams(params);
-    csvParams.delete("skip");
-    csvParams.delete("take");
+    const csvParams = new URLSearchParams();
+    if (q.trim()) csvParams.set("q", q.trim());
+    if (userId) csvParams.set("userId", userId);
+    if (entityType) csvParams.set("entityType", entityType);
+    if (action) csvParams.set("action", action);
+    if (rangeDays !== null) {
+      csvParams.set("since", new Date(Date.now() - rangeDays * 86400000).toISOString());
+    }
     csvParams.set("format", "csv");
     // Trigger download via direct nav — keeps cookies intact, no JS download dance needed.
     window.location.href = `/api/activity?${csvParams.toString()}`;
@@ -140,16 +152,18 @@ export default function ActivityPage() {
                 className="pl-8"
               />
             </div>
-            <select
-              value={userId}
-              onChange={(e) => { setUserId(e.target.value); setSkip(0); }}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">All users</option>
-              {users.data?.map((u) => (
-                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
-              ))}
-            </select>
+            {canListUsers && (
+              <select
+                value={userId}
+                onChange={(e) => { setUserId(e.target.value); setSkip(0); }}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">All users</option>
+                {users.data?.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+                ))}
+              </select>
+            )}
             <select
               value={entityType}
               onChange={(e) => { setEntityType(e.target.value); setSkip(0); }}

@@ -20,8 +20,11 @@ export async function POST(_req: Request, ctx: Ctx) {
     include: { lines: true },
   });
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (order.status === "CANCELED" || order.status === "RECEIVED") {
-    return NextResponse.json({ error: `Order is ${order.status} — nothing to receive.` }, { status: 400 });
+  if (!["ORDERED", "SHIPPED", "PARTIAL"].includes(order.status)) {
+    return NextResponse.json(
+      { error: `Order is ${order.status} — receiving is only possible on ordered/shipped/partial orders.` },
+      { status: 400 },
+    );
   }
 
   // Compute per-line delta = remaining
@@ -38,7 +41,7 @@ export async function POST(_req: Request, ctx: Ctx) {
       // Claim the order first — a second concurrent receive-all finds it
       // already RECEIVED and aborts instead of double-incrementing stock.
       const claim = await tx.incomingOrder.updateMany({
-        where: { id, status: { notIn: ["CANCELED", "RECEIVED"] } },
+        where: { id, status: { in: ["ORDERED", "SHIPPED", "PARTIAL"] } },
         data: { status: "RECEIVED", receivedAt: new Date() },
       });
       if (claim.count === 0) throw new Error("Order was already received or canceled.");

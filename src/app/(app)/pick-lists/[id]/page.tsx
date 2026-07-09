@@ -3,9 +3,11 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { ChevronLeft, Play, Check, Trash2, ListChecks, AlertTriangle, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/dialog-provider";
 import { Input } from "@/components/ui/input";
@@ -48,22 +50,34 @@ export default function PickListDetailPage({ params }: { params: Promise<{ id: s
   const { id } = use(params);
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const { data: session } = useSession();
   const [confirmComplete, setConfirmComplete] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["pick-list", id],
     queryFn: () => api.get<Detail>(`/api/pick-lists/${id}`),
-    refetchInterval: 10_000,
+    // Only poll while the list is still moving. Once COMPLETED / CANCELED, nothing changes.
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === "DRAFT" || status === "IN_PROGRESS") return 10_000;
+      return false;
+    },
   });
 
   const start = useMutation({
     mutationFn: () => api.post(`/api/pick-lists/${id}/start`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["pick-list", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pick-list", id] });
+      qc.invalidateQueries({ queryKey: ["pick-lists"] });
+    },
     onError: (e) => toast.error(String(e)),
   });
   const cancel = useMutation({
     mutationFn: () => api.patch(`/api/pick-lists/${id}`, { status: "CANCELED" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["pick-list", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pick-list", id] });
+      qc.invalidateQueries({ queryKey: ["pick-lists"] });
+    },
     onError: (e) => toast.error(String(e)),
   });
   const recordLine = useMutation({
@@ -77,6 +91,7 @@ export default function PickListDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: (r) => {
       const result = r as { lines?: number };
       qc.invalidateQueries({ queryKey: ["pick-list", id] });
+      qc.invalidateQueries({ queryKey: ["pick-lists"] });
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success(`Completed. Stock decremented across ${result.lines ?? 0} items.`);
@@ -133,7 +148,19 @@ export default function PickListDetailPage({ params }: { params: Promise<{ id: s
             </Button>
           )}
           {(data.status === "DRAFT" || data.status === "IN_PROGRESS") && (
-            <Button variant="destructive" onClick={() => cancel.mutate()}>
+            <Button
+              variant="destructive"
+              disabled={cancel.isPending}
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Cancel pick list?",
+                  description: "This marks the list CANCELED. No stock is changed — anything already picked stays as recorded but won't be decremented.",
+                  confirmText: "Cancel list",
+                  variant: "destructive",
+                });
+                if (ok) cancel.mutate();
+              }}
+            >
               <X className="h-4 w-4" /> Cancel list
             </Button>
           )}
@@ -158,7 +185,8 @@ export default function PickListDetailPage({ params }: { params: Promise<{ id: s
         <CardContent className="space-y-1">
           {data.lines.map((line) => (
             <PickRow
-              key={line.id}
+              // pickedQty in the key re-seeds the row's local input when the server value changes
+              key={`${line.id}:${line.pickedQty}`}
               line={line}
               readOnly={data.status !== "IN_PROGRESS"}
               onSet={(qty) => recordLine.mutate({ lineId: line.id, pickedQty: qty })}
@@ -167,22 +195,25 @@ export default function PickListDetailPage({ params }: { params: Promise<{ id: s
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
-        <Button
-          variant="destructive"
-          onClick={async () => {
-            const ok = await confirm({
-              title: "Delete pick list?",
-              description: "Removes the pick list and its lines. Item stock isn't affected.",
-              confirmText: "Delete",
-              variant: "destructive",
-            });
-            if (ok) del.mutate();
-          }}
-        >
-          <Trash2 className="h-4 w-4" /> Delete
-        </Button>
-      </div>
+      {can(session?.user.role, "location:delete") && (
+        <div className="flex justify-end">
+          <Button
+            variant="destructive"
+            disabled={del.isPending}
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Delete pick list?",
+                description: "Removes the pick list and its lines. Item stock isn't affected.",
+                confirmText: "Delete",
+                variant: "destructive",
+              });
+              if (ok) del.mutate();
+            }}
+          >
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </div>
+      )}
 
       {confirmComplete && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">

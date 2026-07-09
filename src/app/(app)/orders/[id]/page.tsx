@@ -16,13 +16,15 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 import { api } from "@/lib/api-client";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/dialog-provider";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateOnly } from "@/lib/utils";
 import { downloadPdfReport } from "@/lib/pdf";
 
 type Line = {
@@ -66,6 +68,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { id } = use(params);
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const { data: session } = useSession();
+  const canReceive = can(session?.user.role, "item:update");
   const { data, isLoading } = useQuery({
     queryKey: ["order", id],
     queryFn: () => api.get<Detail>(`/api/orders/${id}`),
@@ -73,7 +77,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const setStatus = useMutation({
     mutationFn: (status: Detail["status"]) => api.patch(`/api/orders/${id}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["order", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["order", id] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    },
     onError: (e) => toast.error(String(e)),
   });
 
@@ -81,6 +88,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     mutationFn: () => api.post(`/api/orders/${id}/send`, {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["order", id] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
       toast.success(`PO sent to ${data?.vendorEmail}.`);
     },
     onError: (e) => toast.error(String(e)),
@@ -91,6 +99,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       api.post(`/api/orders/${id}/receive`, { lineId, receivedDelta }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["order", id] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Received.");
@@ -104,6 +113,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: (r) => {
       const result = r as { linesReceived?: number; totalUnits?: number };
       qc.invalidateQueries({ queryKey: ["order", id] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success(`Order received — ${result.totalUnits ?? 0} units across ${result.linesReceived ?? 0} lines.`);
@@ -187,7 +197,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <div className="text-xs text-muted-foreground">
             Created {formatDate(data.orderedAt)}
             {data.sentAt && ` · sent ${formatDate(data.sentAt)}`}
-            {data.expectedAt && ` · expected ${formatDate(data.expectedAt)}`}
+            {data.expectedAt && ` · expected ${formatDateOnly(data.expectedAt)}`}
             {data.receivedAt && ` · received ${formatDate(data.receivedAt)}`}
           </div>
         </div>
@@ -204,16 +214,30 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <Send className="h-4 w-4" /> Send to vendor
             </Button>
           )}
-          {data.status !== "DRAFT" && data.status !== "SHIPPED" && data.status !== "RECEIVED" && data.status !== "CANCELED" && (
+          {data.status !== "DRAFT" && data.status !== "SHIPPED" && data.status !== "PARTIAL" && data.status !== "RECEIVED" && data.status !== "CANCELED" && (
             <Button variant="outline" onClick={() => setStatus.mutate("SHIPPED")}>Mark shipped</Button>
           )}
-          {canReceiveAll && (
+          {canReceiveAll && canReceive && (
             <Button onClick={() => setConfirmAll(true)}>
               <CheckCheck className="h-4 w-4" /> Receive full order
             </Button>
           )}
           {data.status !== "CANCELED" && data.status !== "RECEIVED" && (
-            <Button variant="destructive" onClick={() => setStatus.mutate("CANCELED")}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={setStatus.isPending}
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Cancel this order?",
+                  description: "Marks the order CANCELED. Any stock already received stays in inventory — only the remaining open quantities are dropped.",
+                  confirmText: "Cancel order",
+                  variant: "destructive",
+                });
+                if (ok) setStatus.mutate("CANCELED");
+              }}
+            >
+              Cancel
+            </Button>
           )}
         </div>
       </header>
@@ -289,10 +313,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <CardContent className="space-y-2">
           {data.lines.map((line) => (
             <ReceiveRow
-              key={line.id}
+              // remaining in the key re-seeds the row's local qty input when the server value changes
+              key={`${line.id}:${line.expectedQty - line.receivedQty}`}
               line={line}
               onReceive={(delta) => receive.mutate({ lineId: line.id, receivedDelta: delta })}
-              disabled={data.status === "DRAFT" || data.status === "RECEIVED" || data.status === "CANCELED"}
+              disabled={!canReceive || data.status === "DRAFT" || data.status === "RECEIVED" || data.status === "CANCELED"}
             />
           ))}
           <div className="flex items-center justify-between pt-2 border-t">

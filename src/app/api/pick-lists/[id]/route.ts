@@ -5,13 +5,17 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertCan } from "@/lib/permissions";
 
+// Status is deliberately NOT free-form here: COMPLETED only ever happens via
+// /complete (which decrements stock atomically), IN_PROGRESS via /start.
+// Allowing arbitrary status writes let a COMPLETED list be flipped back and
+// completed again — double-decrementing stock. Only CANCELED is accepted.
 const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   destination: z.string().max(120).nullable().optional(),
   notes: z.string().nullable().optional(),
   assignedToId: z.string().cuid().nullable().optional(),
   fromLocationId: z.string().cuid().nullable().optional(),
-  status: z.enum(["DRAFT", "IN_PROGRESS", "COMPLETED", "CANCELED"]).optional(),
+  status: z.literal("CANCELED").optional(),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -45,21 +49,40 @@ export async function PATCH(req: Request, ctx: Ctx) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await ctx.params;
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  // Medics can only update notes on their own picks
+  let data: z.infer<typeof patchSchema> = parsed.data;
+
+  // Medics can only update notes on their own picks — enforce the whitelist.
   if (session.user.role === "MEDIC") {
     const pl = await prisma.pickList.findUnique({ where: { id }, select: { assignedToId: true } });
     if (!pl || pl.assignedToId !== session.user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    data = { notes: parsed.data.notes };
+    if (data.notes === undefined) {
+      return NextResponse.json({ error: "Medics can only update notes." }, { status: 403 });
+    }
+  }
+
+  // Cancel: only from DRAFT / IN_PROGRESS (COMPLETED lists already moved stock).
+  if (data.status === "CANCELED") {
+    const flipped = await prisma.pickList.updateMany({
+      where: { id, status: { in: ["DRAFT", "IN_PROGRESS"] } },
+      data,
+    });
+    if (flipped.count === 0) {
+      return NextResponse.json({ error: "Only draft or in-progress lists can be canceled." }, { status: 409 });
+    }
+    const updated = await prisma.pickList.findUnique({ where: { id } });
+    return NextResponse.json(updated);
   }
 
   const updated = await prisma.pickList.update({
     where: { id },
-    data: parsed.data,
+    data,
   });
   return NextResponse.json(updated);
 }

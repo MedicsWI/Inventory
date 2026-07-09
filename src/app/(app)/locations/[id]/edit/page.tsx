@@ -12,6 +12,7 @@ type Loaded = {
   parentId: string | null;
   barcode: string | null;
   notes: string | null;
+  updatedAt?: string;
 };
 
 export default function EditLocationPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,6 +20,9 @@ export default function EditLocationPage({ params }: { params: Promise<{ id: str
   const { data, isLoading } = useQuery({
     queryKey: ["location", id],
     queryFn: () => api.get<Loaded>(`/api/locations/${id}`),
+    // Never seed the form from a stale cached copy (same fix as item edit).
+    refetchOnMount: "always",
+    staleTime: 0,
   });
 
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>;
@@ -26,6 +30,7 @@ export default function EditLocationPage({ params }: { params: Promise<{ id: str
 
   return (
     <LocationForm
+      key={data.updatedAt ?? data.id}
       mode="edit"
       initial={{
         id: data.id,

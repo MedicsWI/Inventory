@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -28,6 +28,7 @@ export default function NewPickListPage() {
 
 function NewPickListInner() {
   const router = useRouter();
+  const qc = useQueryClient();
   const sp = useSearchParams();
   const items = useQuery({ queryKey: ["items-lookup"], queryFn: () => api.get<ItemOpt[]>("/api/items") });
   const locs = useQuery({ queryKey: ["locs-flat"], queryFn: () => api.get<LocOpt[]>("/api/locations") });
@@ -42,22 +43,24 @@ function NewPickListInner() {
   const [templateId, setTemplateId] = useState(sp.get("template") ?? "");
   const [lines, setLines] = useState<Line[]>([{ itemId: "", requestedQty: 1, notes: "" }]);
 
-  // When a template is selected, load its items as the starting line set
+  // When a template is selected, load its items as the starting line set.
+  // Track the last hydrated template so re-renders (e.g. templates.data arriving)
+  // never clobber lines the user has already edited — only a template *change* re-hydrates.
+  const hydratedTemplateId = useRef<string | null>(null);
   useEffect(() => {
     if (!templateId) return;
+    if (hydratedTemplateId.current === templateId) return;
+    hydratedTemplateId.current = templateId;
     let cancelled = false;
     (async () => {
-      const t = await api.get<{ items: { itemId: string; quantity: number; notes: string | null }[] }>(`/api/pick-list-templates/${templateId}`);
+      const t = await api.get<{ name: string; items: { itemId: string; quantity: number; notes: string | null }[] }>(`/api/pick-list-templates/${templateId}`);
       if (cancelled) return;
       if (t.items.length === 0) return;
       setLines(t.items.map((it) => ({ itemId: it.itemId, requestedQty: it.quantity, notes: it.notes ?? "" })));
-      if (!name) {
-        const tmpl = templates.data?.find((x) => x.id === templateId);
-        if (tmpl) setName(`${tmpl.name} — ${new Date().toLocaleDateString()}`);
-      }
+      setName((prev) => prev || `${t.name} — ${new Date().toLocaleDateString()}`);
     })();
     return () => { cancelled = true; };
-  }, [templateId, templates.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [templateId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateLine(i: number, patch: Partial<Line>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -89,6 +92,7 @@ function NewPickListInner() {
     onSuccess: (r) => {
       const id = (r as { id?: string })?.id;
       toast.success("Pick list created.");
+      qc.invalidateQueries({ queryKey: ["pick-lists"] });
       router.push(id ? `/pick-lists/${id}` : "/pick-lists");
     },
     onError: (e) => toast.error(String(e)),
@@ -166,7 +170,7 @@ function NewPickListInner() {
               <div className="col-span-4 sm:col-span-2 space-y-1">
                 <Label className="text-xs">Qty</Label>
                 <Input type="number" min={1} value={line.requestedQty}
-                  onChange={(e) => updateLine(i, { requestedQty: Number(e.target.value) || 1 })} />
+                  onChange={(e) => updateLine(i, { requestedQty: Math.max(1, Math.floor(Number(e.target.value)) || 1) })} />
               </div>
               <div className="col-span-7 sm:col-span-2 space-y-1">
                 <Label className="text-xs">Notes</Label>
