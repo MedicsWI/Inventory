@@ -28,7 +28,7 @@ and stock-count lines keep their existing FKs — those flows already operate on
 
 ## Phases
 
-### Phase A — data shape (DONE 07/11/2026)
+### Phase A — data shape (DONE 07/11/2026 — SQL applied to prod + deployed; do NOT re-run the script)
 - `Product` model + `Item.productId` in `prisma/schema.prisma`
 - `prisma/sql/2026-07-11_product_split_phase_a.sql`: creates table, backfills
   one product per distinct lower(name) among `returnable = false` items, links
