@@ -142,11 +142,12 @@ model Location {
 }
 
 model Category {
-  id        String   @id @default(cuid())
-  name      String   @unique
+  id        String    @id @default(cuid())
+  name      String    @unique
   color     String? // hex, for tags
   items     Item[]
-  createdAt DateTime @default(now())
+  products  Product[]
+  createdAt DateTime  @default(now())
 }
 
 model Tag {
@@ -155,6 +156,35 @@ model Tag {
   color     String?
   items     Item[]   @relation("ItemTags")
   createdAt DateTime @default(now())
+}
+
+// -------------------- Product (master item) --------------------
+// One row per PRODUCT ("Gauze 4x4"); Item rows below are that product's stock
+// at a specific location. Serialized returnable gear (AED-1, X-Series-2) keeps
+// per-unit Item rows and may leave productId null.
+// Added 07/11/2026 (product-split Phase A — see docs/product-split-plan.md).
+model Product {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  sku         String?
+  // Manufacturer UPC/NDC — lives on the product, not the per-location rows.
+  barcode     String? @unique
+  unit        String?
+  photoUrl    String?
+  returnable  Boolean @default(false)
+  // Default alert level for new stock rows (per-location override on Item).
+  defaultLowStockThreshold Int?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  items      Item[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([categoryId])
 }
 
 model Item {
@@ -180,6 +210,10 @@ model Item {
   tileDeviceId String? @unique @map("tile_device_id")
 
   // Relations
+  // Master product this stock row belongs to (product-split Phase A: nullable;
+  // serialized returnable assets may stay null permanently).
+  productId             String?
+  product               Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
   locationId            String?
   location              Location?              @relation(fields: [locationId], references: [id], onDelete: SetNull)
   categoryId            String?
@@ -194,6 +228,7 @@ model Item {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([productId])
   @@index([locationId])
   @@index([categoryId])
   @@index([expirationDate])
